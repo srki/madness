@@ -1,3 +1,4 @@
+
 /*
   This file is part of MADNESS.
 
@@ -52,6 +53,27 @@
 #include <iostream>
 
 using namespace madness;
+
+struct tensortxt {
+	void operator()(const Key<6>& key, const GenTensor<double>& t) const {
+		int i=0;
+//		if (key.level()==5) {
+		if (t.has_data()) {
+			std::stringstream ss;
+			ss << key;
+			FILE * pFile = fopen (ss.str().c_str(),"w");
+			int k=t.dim(0);
+			Tensor<double> tt=t.full_tensor().reshape(k*k*k, k*k*k);
+			for (int i=0; i<k*k*k; ++i) {
+				for (int j=0; j<k*k*k; ++j) {
+					fprintf(pFile,"%16.12f",tt(i,j));
+				}
+				fprintf(pFile,"\n");
+			}
+			fclose(pFile);
+		}
+	}
+};
 
 namespace madness{
 extern std::vector<std::string> cubefile_header(std::string filename="input", const bool& no_orient=false);
@@ -114,54 +136,11 @@ void draw_circle(World& world, Function<double,NDIM>& pair, const std::string re
 
 
 void dostuff(World& world) {
-    real_function_3d rho=real_factory_3d(world),rhonemo=real_factory_3d(world),
-            vsigaa,vsigaanemo;
-    real_function_3d sigmanemo=real_factory_3d(world);
-    real_function_3d dens_pt0=real_factory_3d(world);
-
-    load(rho,"rho");
-    load(rhonemo,"rhonemo");
-    load(sigmanemo,"sigmanemo");
-    load(dens_pt0,"dens_pt0");
-
-    FunctionDefaults<3>::set_k(rho.k());
-    FunctionDefaults<3>::set_thresh(rho.thresh());
-
-    rho.reconstruct();
-    rhonemo.reconstruct();
-    std::vector< std::shared_ptr<Derivative<double,3> > > gradop =
-             gradient_operator<double,3>(world);
-
-    // vsig with nemos
-    {
-
-    }
-
-    // vsig with mos
-    {
-        real_function_3d drhoa_x=(*gradop[0])(rho, true).refine();
-        real_function_3d drhoa_y=(*gradop[1])(rho, true).refine();
-        real_function_3d drhoa_z=(*gradop[2])(rho, true).refine();
-        world.gop.fence();
-
-        // assign the reduced densities sigma
-        vsigaa=(drhoa_x * drhoa_x + drhoa_y * drhoa_y + drhoa_z * drhoa_z);
-    }
-
-    double width = FunctionDefaults<3>::get_cell_min_width()/2.0 - 1.e-3;
-    coord_3d start(0.0); start[0]=-width;
-    coord_3d end(0.0); end[0]=width;
-
-
-    plot_line("line_rho",10000,start,end,rho);
-    plot_line("line_vsigaa",10000,start,end,vsigaa);
-    plot_line("line_dens_pt0",10000,start,end,dens_pt0);
-
-    SeparatedConvolution<double,3> smooth=SmoothingOperator3D(world,0.005);
-    real_function_3d sigmanemo_smooth=smooth(sigmanemo);
-    plot_line("line_sigaanemo_smooth",10000,start,end,sigmanemo_smooth);
-    real_function_3d dens_pt0_smooth=smooth(dens_pt0);
-    plot_line("line_dens_pt0_smooth",10000,start,end,dens_pt0_smooth);
+	real_function_6d Uphi0=real_factory_6d(world);
+	load_function(world,Uphi0,"Uphi0");
+	Uphi0.reconstruct();
+	tensortxt op;
+	Uphi0.unaryop_coeff(op);
 
 }
 
@@ -231,7 +210,7 @@ int main(int argc, char** argv) {
 		print("");
 	}
 
-//	dostuff(world);
+	dostuff(world);
 
     try {
         static const size_t NDIM=3;

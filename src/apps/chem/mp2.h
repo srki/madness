@@ -369,7 +369,7 @@ namespace madness {
         		initialize<std::vector<int> >("pair",{-1,-1});
         		initialize<int>("freeze",0);
         		initialize<int>("maxsub",2);
-        		initialize<bool>("restart",true);
+        		initialize<bool>("restart",false);
         		initialize<int>("maxiter",5);
 
         		read_and_set_derived_values(world);

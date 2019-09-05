@@ -904,6 +904,8 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 			bsh_eps);
 
     real_function_6d Uphi0 = make_Uphi0(pair);
+	save_function(Uphi0, "Uphi0");
+
     real_function_6d KffKphi0 = make_KffKphi0(pair);
 
 //	{
