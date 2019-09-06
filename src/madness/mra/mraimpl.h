@@ -1933,12 +1933,28 @@ namespace madness {
 
         if (world.rank()==0) {
             print("configurations     number of nodes");
-            if (world.rank()==0) print("        full rank    ",n_full);
+            print("        full rank    ",n_full);
             for (unsigned int i=0; i<n.size(); i++) {
-                long m=n[i];
-                if (world.rank()==0) print("           ",i,"    ",m);
+                print("           ",i,"    ",n[i]);
             }
-            if (world.rank()==0) print("       large rank    ",n_large);
+            print("       large rank    ",n_large);
+
+            // repeat for logarithmic scale: <3, <10, <30, <100, ..
+            Tensor<long> nlog(6);
+            nlog=0;
+            for (unsigned int i=0; i<std::min(3l,n.size()); i++) nlog[0]+=n[i];
+            for (unsigned int i=3; i<std::min(10l,n.size()); i++) nlog[1]+=n[i];
+            for (unsigned int i=10; i<std::min(30l,n.size()); i++) nlog[2]+=n[i];
+            for (unsigned int i=30; i<std::min(100l,n.size()); i++) nlog[3]+=n[i];
+            for (unsigned int i=100; i<std::min(300l,n.size()); i++) nlog[4]+=n[i];
+            for (unsigned int i=300; i<std::min(1000l,n.size()); i++) nlog[5]+=n[i];
+
+            std::vector<std::string> slog={"3","10","30","100","300","1000"};
+            for (unsigned int i=0; i<nlog.size(); i++) {
+                print("          < ",slog[i],"    ",nlog[i]);
+            }
+            print("       large rank    ",n_large);
+
         }
     }
 

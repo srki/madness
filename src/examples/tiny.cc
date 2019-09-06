@@ -136,11 +136,20 @@ void draw_circle(World& world, Function<double,NDIM>& pair, const std::string re
 
 
 void dostuff(World& world) {
+    FunctionDefaults<6>::set_tensor_type(TT_2D);
+
 	real_function_6d Uphi0=real_factory_6d(world);
 	load_function(world,Uphi0,"Uphi0");
-	Uphi0.reconstruct();
-	tensortxt op;
-	Uphi0.unaryop_coeff(op);
+//	Uphi0.get_impl()->targs=TensorArgs(TensorArgs(FunctionDefaults<6>::get_thresh()*
+//			GenTensor<double>::fac_reduce(),TT_2D));
+	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
+//	Uphi0.change_tensor_type(TensorArgs(FunctionDefaults<6>::get_thresh()*
+//			GenTensor<double>::fac_reduce(),TT_2D));
+//	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
+	Uphi0.get_impl()->print_stats();
+//	Uphi0.reconstruct();
+//	tensortxt op;
+//	Uphi0.unaryop_coeff(op);
 
 }
 
