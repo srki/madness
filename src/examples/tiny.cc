@@ -143,13 +143,14 @@ void dostuff(World& world) {
 //	Uphi0.get_impl()->targs=TensorArgs(TensorArgs(FunctionDefaults<6>::get_thresh()*
 //			GenTensor<double>::fac_reduce(),TT_2D));
 	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
-//	Uphi0.change_tensor_type(TensorArgs(FunctionDefaults<6>::get_thresh()*
-//			GenTensor<double>::fac_reduce(),TT_2D));
-//	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
+	print("FunctionDefaults<6>::get_thresh()",FunctionDefaults<6>::get_thresh());
+	Uphi0.change_tensor_type(TensorArgs(FunctionDefaults<6>::get_thresh(),TT_2D));
+	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
 	Uphi0.get_impl()->print_stats();
-//	Uphi0.reconstruct();
-//	tensortxt op;
-//	Uphi0.unaryop_coeff(op);
+	Uphi0.compress();
+	Uphi0.get_impl()->print_stats();
+	tensortxt op;
+	Uphi0.unaryop_coeff(op);
 
 }
 
