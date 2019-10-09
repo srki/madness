@@ -39,7 +39,7 @@
 #include <madness/tensor/clapack.h>
 #include <madness/tensor/tensor_lapack.h>
 #include <madness/fortran_ctypes.h>
-
+#include <madness/world/archive.h>
 
 /**
   \file tensortrain.h
@@ -49,7 +49,6 @@
   \addtogroup tensor
 
 */
-
 
 namespace madness {
 
@@ -121,7 +120,7 @@ namespace madness {
 	 * has full rank it will need about twice the storage space of the full tensor
 	 */
 	template<typename T>
-	class TensorTrain {
+	class TensorTrain : public BaseTensor {
 
 	    // make all types of TensorTrain friends of each other (for type conversion)
 	    template<typename Q>
@@ -146,6 +145,7 @@ namespace madness {
 
 		/// empty constructor
 		TensorTrain() : core(), zero_rank(true) {
+			set_size_and_dim({});
 		}
 
 		/// ctor for a TensorTrain, with the tolerance eps
@@ -161,7 +161,7 @@ namespace madness {
 		/// @param[in]	eps	the accuracy threshold
 		TensorTrain(const Tensor<T>& t, double eps)
 			: core(), zero_rank(false) {
-
+			BaseTensor::set_dims_and_size(t.ndim(),t.dims());
 		    MADNESS_ASSERT(t.size() != 0);
             MADNESS_ASSERT(t.ndim() != 0);
 
@@ -185,6 +185,7 @@ namespace madness {
 		/// @param[in]	dims	the tt structure
 		TensorTrain(const Tensor<T>& t, double eps, const std::vector<long> dims)
 			: core(), zero_rank(false) {
+			BaseTensor::set_dims_and_size(t.ndim(),t.dims());
 
 		    MADNESS_ASSERT(t.size() != 0);
             MADNESS_ASSERT(t.ndim() != 0);
@@ -192,18 +193,25 @@ namespace madness {
 		}
 
 		/// ctor for a TensorTrain, set up only the dimensions, no data
+		TensorTrain(const long& ndims, const long* dims) {
+            zero_rank = true;
+			set_dims_and_size(ndims,dims);
+		}
+
+		/// ctor for a TensorTrain, set up only the dimensions, no data
 		TensorTrain(const std::vector<long>& dims) {
             zero_rank = true;
+			set_size_and_dim(dims);
 
-            core.resize(dims.size());
-            // first and last core tensor
-            core[0] = Tensor<T>(dims[0],long(0));
-            core[dims.size()-1] = Tensor<T>(long(0),dims[dims.size()-1]);
-
-            // iterate through the rest -- fast forward
-            for (int d=1; d<dims.size()-1; ++d) {
-                core[d] = Tensor<T>(long(0),dims[d],long(0));
-		    }
+//            core.resize(dims.size());
+//            // first and last core tensor
+//            core[0] = Tensor<T>(dims[0],long(0));
+//            core[dims.size()-1] = Tensor<T>(long(0),dims[dims.size()-1]);
+//
+//            // iterate through the rest -- fast forward
+//            for (int d=1; d<dims.size()-1; ++d) {
+//                core[d] = Tensor<T>(long(0),dims[d],long(0));
+//		    }
 
 		}
 
@@ -214,6 +222,10 @@ namespace madness {
 		/// @param[in]  core    vector of core tensors, properly shaped
         TensorTrain(const std::vector<Tensor<T> >& c) : core(c) {
             zero_rank=false;
+            std::vector<long> d(c.size());
+            d[0]=core[0].dim(0);    // dim,rank
+            for (long i=1; i<d.size(); ++i) d[i]=core[i].dim(1);  // rank,dim,rank
+			set_size_and_dim(d.size(),d.data());
 
             // check for zero ranks
             for (int d=1; d<core.size(); ++d) if (core[d].dim(0)==0) zero_me();
@@ -223,11 +235,14 @@ namespace madness {
 		/// copy constructor, shallow
 		TensorTrain(const TensorTrain& other) : core(other.core),
 		        zero_rank(other.zero_rank) {
+			set_dims_and_size(other.ndim(),other.dims());
+
 		}
 
 		/// assigment operator
 		TensorTrain& operator=(const TensorTrain& other) {
 		    if (this!=&other) {
+				set_dims_and_size(other.ndim(),other.dims());
                 zero_rank=other.zero_rank;
                 core=other.core;
 		    }
@@ -245,27 +260,23 @@ namespace madness {
             return result;
         }
 
+    	void set_size_and_dim(std::vector<long> dims) {
+    		BaseTensor::set_dims_and_size(dims.size(),dims.data());
+    	}
+
         /// serialize this
         template <typename Archive>
         void serialize(Archive& ar) {
-            long dim=ndim();
-            ar & zero_rank & dim;
+
+        	// serialize basetensor
+        	ar & _ndim & archive::wrap(_dim,TENSOR_MAXDIM) & _size & _id
+        			& archive::wrap(_stride,TENSOR_MAXDIM);
+
+        	long core_size=core.size();
+            ar & zero_rank & core_size;
 
             // no empty tensor
-            if (dim>0) {
-
-                ar & core;
-
-                // need this because tensor serialization does not preserve the
-                // dimensions if the tensor is empty, but we need to!
-
-                // existing tensor filled with zeros
-                if (zero_rank) {
-                    std::vector<long> d=this->dims();
-                    ar & d;
-                    zero_me(d);
-                }
-            }
+            if (core_size>0) ar & core;
         }
 
 
@@ -275,11 +286,11 @@ namespace madness {
 		friend TensorTrain copy(const TensorTrain& other) {
 
 		    // fast return
-		    if (other.zero_rank) return TensorTrain(other.dims());
+		    if (other.zero_rank) return TensorTrain(other.ndim(),other.dims());
 
-            TensorTrain result;
+            TensorTrain result(other.ndim(),other.dims());
             for (const Tensor<T>& t: other.core) {
-                if (t.size()==0) return TensorTrain(other.dims());  // also zero
+                if (t.size()==0) return TensorTrain(other.ndim(),other.dims());  // also zero
                 result.core.push_back(madness::copy(t));
             }
             result.zero_rank=other.zero_rank;
@@ -328,10 +339,16 @@ namespace madness {
 			core.resize(dims.size());
 			eps=eps/sqrt(dims.size()-1);	// error is relative
 
-			// the maximum rank is the smaller one of the ranks unfolded from the
-			// left and the right.
-			int rmax1=1;
-			int rmax2=1;
+			// the maximum rank of the SVD decompositions
+			long Udim0=1;
+			long rmax=1;
+			for (long i=0; i<dims.size(); ++i) {
+				Udim0*=dims[i];
+				rmax=std::max(rmax,std::min(Udim0,t.size()/Udim0));
+			}
+
+			long rmax1=1;
+			long rmax2=1;
 			long n1=1, n2=1;
 			long lwork=0;
 			for (int i=0, j=dims.size()-1; i<=j; ++i, --j) {
@@ -351,7 +368,6 @@ namespace madness {
 				lwork=std::max(lwork,std::max(3*min1+max1,5*min1));
 				lwork=std::max(lwork,std::max(3*min2+max2,5*min2));
 			}
-			const int rmax=std::min(rmax1,rmax2);
 
 			// these are max dimensions, so we can avoid frequent reallocation
 			Tensor<T> u(rmax1*rmax2);
@@ -453,7 +469,7 @@ namespace madness {
 
 		/// turn this into an empty tensor with all cores properly shaped
 		void zero_me() {
-		    *this=TensorTrain<T>(this->dims());
+		    *this=TensorTrain<T>(this->ndim(),this->dims());
 		}
 
         /// turn this into an empty tensor with all cores properly shaped
@@ -641,7 +657,7 @@ namespace madness {
                 if (size>10000000)
                     MADNESS_EXCEPTION("emul in TensorTrain too large -- use full rank tenspr",1);
             }
-            TensorTrain result(dims());
+            TensorTrain result(ndim(),dims());
 
             // fast return for zero ranks
             if (zero_rank or other.zero_rank) {
@@ -827,7 +843,7 @@ namespace madness {
 		/// @param[out] VT The right singular vectors, (rank,{i})
 		/// @param[out]	s Vector holding 1's, (rank)
 		void two_mode_representation(Tensor<T>& U, Tensor<T>& VT,
-		        Tensor< typename Tensor<T>::scalar_type >& s) {
+		        Tensor< typename Tensor<T>::scalar_type >& s) const {
 
 		    // number of dimensions needs to be even
 		    MADNESS_ASSERT(ndim()%2==0);
@@ -888,8 +904,6 @@ namespace madness {
 		        zero_me();
 		        return;
 		    }
-
-		    std::vector<long> tt_dims=this->dims();
 
 		    eps=eps/sqrt(this->ndim());
 		    if (not verify()) MADNESS_EXCEPTION("ranks in TensorTrain inconsistent",1);
@@ -1019,7 +1033,7 @@ namespace madness {
 		        // truncate the SVD
 		        int r_truncate=SRConf<T>::max_sigma(eps,ds,s)+1;
 		        if (r_truncate==0) {
-		            zero_me(tt_dims);
+		            zero_me();
 		            return;
 		        }
 
@@ -1044,8 +1058,8 @@ namespace madness {
 		    if (not verify()) MADNESS_EXCEPTION("ranks in TensorTrain inconsistent",1);
 		}
 
-		/// return the number of dimensions
-		long ndim() const {return core.size();}
+//		/// return the number of dimensions
+//		long ndim() const {return core.size();}
 
 		/// return the number of coefficients in all core tensors
 		long size() const {
@@ -1064,19 +1078,19 @@ namespace madness {
 			return n;
 		}
 
-		/// return the number of entries in dimension i
-		long dim(const int i) const {
-			if (i==0) return core[0].dim(0);
-			return core[i].dim(1);
-		}
+//		/// return the number of entries in dimension i
+//		long dim(const int i) const {
+//			if (i==0) return core[0].dim(0);
+//			return core[i].dim(1);
+//		}
 
 		/// return the dimensions of this tensor
-		std::vector<long> dims() const {
-		    std::vector<long> d(ndim());
-            d[0]=core[0].dim(0);    // dim,rank
-		    for (long i=1; i<ndim(); ++i) d[i]=core[i].dim(1);  // rank,dim,rank
-		    return d;
-		}
+//		std::vector<long> dims() const {
+//		    std::vector<long> d(ndim());
+//            d[0]=core[0].dim(0);    // dim,rank
+//		    for (long i=1; i<ndim(); ++i) d[i]=core[i].dim(1);  // rank,dim,rank
+//		    return d;
+//		}
 
 		/// check that the ranks of all core tensors are consistent
 		bool verify() const {
@@ -1290,7 +1304,7 @@ namespace madness {
             return result;
         }
 
-
+public:
         template <typename R, typename Q>
         friend TensorTrain<TENSOR_RESULT_TYPE(R,Q)> transform(
                 const TensorTrain<R>& t, const Tensor<Q>& c);
@@ -1321,7 +1335,7 @@ namespace madness {
         typedef TENSOR_RESULT_TYPE(T,Q) resultT;
 
         // fast return if possible
-        if (t.zero_rank or (t.ndim()==0)) return TensorTrain<resultT>(t.dims());
+        if (t.zero_rank or (t.ndim()==0)) return TensorTrain<resultT>(t.ndim(),t.dims());
 
         const long ndim=t.ndim();
 
@@ -1370,7 +1384,7 @@ namespace madness {
         typedef TENSOR_RESULT_TYPE(T,Q) resultT;
 
         // fast return if possible
-        if (t.zero_rank or (t.ndim()==0)) return TensorTrain<resultT>(t.dims());
+        if (t.zero_rank or (t.ndim()==0)) return TensorTrain<resultT>(t.ndim(),t.dims());
 
         const long ndim=t.ndim();
 
@@ -1418,7 +1432,7 @@ namespace madness {
         typedef TENSOR_RESULT_TYPE(T,Q) resultT;
 
         // fast return if possible
-        if (t.zero_rank or (t.ndim()==0)) return TensorTrain<resultT>(t.dims());
+        if (t.zero_rank or (t.ndim()==0)) return TensorTrain<resultT>(t.ndim(),t.dims());
 
         const long ndim=t.ndim();
         MADNESS_ASSERT(axis<ndim and axis>=0);

@@ -1944,15 +1944,15 @@ namespace madness {
 			MADNESS_ASSERT(maxk==g_coeff.dim(0));
 
 			// get tensors for particle 1 and 2 (U and V in SVD)
-			tensorT vec1=copy(g_values.config().ref_vector(0).reshape(rank,maxk,maxk,maxk));
-			tensorT vec2=g_values.config().ref_vector(1).reshape(rank,maxk,maxk,maxk);
+			tensorT vec1=copy(g_values.get_svdtensor().ref_vector(0).reshape(rank,maxk,maxk,maxk));
+			tensorT vec2=g_values.get_svdtensor().ref_vector(1).reshape(rank,maxk,maxk,maxk);
 			tensorT result(maxk,maxk,maxk);  // should give zero tensor
 			// Multiply the values of each U and V vector
 			for (long i=0; i<rank; ++i) {
 				tensorT c1=vec1(Slice(i,i),_,_,_); // shallow copy (!)
 				tensorT c2=vec2(Slice(i,i),_,_,_);
 				c1.emul(c2); // this changes vec1 because of shallow copy, but not the g function because of the deep copy made above
-				double singular_value_i = g_values.config().weights(i);
+				double singular_value_i = g_values.get_svdtensor().weights(i);
 				result += (singular_value_i*c1);
 			}
 
@@ -2147,8 +2147,10 @@ namespace madness {
                     MADNESS_ASSERT(f->get_coeffs().probe(mapkey));
                     const nodeT& mapnode=f->get_coeffs().find(mapkey).get()->second;
 
-                    bool have_c1=fnode.coeff().has_data() and fnode.coeff().config().has_data();
-                    bool have_c2=mapnode.coeff().has_data() and mapnode.coeff().config().has_data();
+//                    bool have_c1=fnode.coeff().has_data() and fnode.coeff().config().has_data();
+//                    bool have_c2=mapnode.coeff().has_data() and mapnode.coeff().config().has_data();
+                    bool have_c1=fnode.coeff().has_data();
+                    bool have_c2=mapnode.coeff().has_data();
 
                     if (have_c1 and have_c2) {
                         tensorT c1=fnode.coeff().full_tensor_copy();
@@ -3210,13 +3212,13 @@ namespace madness {
                 MADNESS_ASSERT(fcoeff.tensor_type()==TT_2D);
                 const long rank=fcoeff.rank();
                 const long maxk=fcoeff.dim(0);
-                tensorT vec=fcoeff.config().ref_vector(particle-1).reshape(rank,maxk,maxk,maxk);
+                tensorT vec=fcoeff.get_svdtensor().ref_vector(particle-1).reshape(rank,maxk,maxk,maxk);
                 for (long i=0; i<rank; ++i) {
                     double lo,hi;
                     tensorT c=vec(Slice(i,i),_,_,_).reshape(maxk,maxk,maxk);
                     g.get_impl()->tnorm(c, &lo, &hi);        // note we use g instead of h, since g is 3D
-                    flo+=lo*fcoeff.config().weights(i);
-                    fhi+=hi*fcoeff.config().weights(i);
+                    flo+=lo*fcoeff.get_svdtensor().weights(i);
+                    fhi+=hi*fcoeff.get_svdtensor().weights(i);
                 }
                 double total_hi=glo*fhi + ghi*flo + fhi*ghi;
                 return (total_hi<h->truncate_tol(h->get_thresh(),key));
@@ -4564,7 +4566,7 @@ namespace madness {
             // can be done in full form for the specific particle
             coeffT coeff_SVD=coeff.convert(TensorArgs(-1.0,TT_2D));
 #ifdef USE_LRT
-            coeff_SVD.impl.svd->orthonormalize(tol*LowRankTensor<T>::fac_reduce());
+            coeff_SVD.get_svdtensor().orthonormalize(tol*LowRankTensor<T>::fac_reduce());
 #endif
 
             const std::vector<opkeyT>& disp = op->get_disp(key.level());
@@ -5675,15 +5677,17 @@ namespace madness {
 
                 const int otherdim=(dim+1)%2;
                 const int k=fcoeff.dim(0);
-                std::vector<Slice> s(fcoeff.config().dim_per_vector()+1,_);
+                std::vector<Slice> s(fcoeff.get_svdtensor().dim_per_vector(dim)+1,_);
+                std::vector<Slice> other_s(fcoeff.get_svdtensor().dim_per_vector(otherdim)+1,_);
 
                 // do the actual contraction
                 for (int r=0; r<fcoeff.rank(); ++r) {
                     s[0]=Slice(r,r);
-                    const tensorT contracted_tensor=fcoeff.config().ref_vector(dim)(s).reshape(k,k,k);
-                    const tensorT other_tensor=fcoeff.config().ref_vector(otherdim)(s).reshape(k,k,k);
+                    other_s[0]=Slice(r,r);
+                    const tensorT contracted_tensor=fcoeff.get_svdtensor().ref_vector(dim)(s).reshape(k,k,k);
+                    const tensorT other_tensor=fcoeff.get_svdtensor().ref_vector(otherdim)(other_s).reshape(k,k,k);
                     const double ovlp= gtensor.trace_conj(contracted_tensor);
-                    const double fac=ovlp * fcoeff.config().weights(r);
+                    const double fac=ovlp * fcoeff.get_svdtensor().weights(r);
                     final+=fac*other_tensor;
                 }
 

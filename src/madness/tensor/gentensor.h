@@ -139,6 +139,11 @@ namespace madness {
 			: thresh(thresh1)
 			, tt(tt1) {
 		}
+		TensorArgs(const TensorType& tt1, const double& thresh1)
+			: thresh(thresh1)
+			, tt(tt1) {
+		}
+
 		static std::string what_am_i(const TensorType& tt) {
 			if (tt==TT_2D) return "TT_2D";
 			if (tt==TT_FULL) return "TT_FULL";
@@ -396,7 +401,7 @@ namespace madness {
 			TensorType ttype=tensor_type();
 			if (ttype==TT_2D) {
 
-#if 1
+#if 0
 				Tensor<T> U,VT;
 				Tensor< typename Tensor<T>::scalar_type > s;
 
@@ -436,8 +441,12 @@ namespace madness {
 				MADNESS_ASSERT(rhs.iscontiguous());
 				std::vector<long> d(_ptr->dim_eff(),_ptr->kVec());
 				Tensor<T> values_eff=rhs.reshape(d);
+				double wall0=wall_time();
 
 				this->computeSVD(targs.thresh,values_eff);
+				double wall1=wall_time();
+				print("wall",wall1-wall0);
+
 #endif
 			} else if (ttype==TT_FULL){
 				_ptr.reset(new configT(copy(rhs)));
@@ -1222,25 +1231,6 @@ namespace madness {
 
     }
 
-    /// Transform all dimensions of the tensor t by distinct matrices c
-
-    /// Similar to transform but each dimension is transformed with a
-    /// distinct matrix.
-    /// \code
-    /// result(i,j,k...) <-- sum(i',j', k',...) t(i',j',k',...) c[0](i',i) c[1](j',j) c[2](k',k) ...
-    /// \endcode
-    /// The first dimension of the matrices c must match the corresponding
-    /// dimension of t.
-    template <class T, class Q>
-    GenTensor<TENSOR_RESULT_TYPE(T,Q)> general_transform(const GenTensor<T>& t, const Tensor<Q> c[]) {
-        return t.general_transform(c);
-    }
-
-    template <class T>
-    GenTensor<T> general_transform(const GenTensor<T>& t, const Tensor<T> c[]) {
-        return t.general_transform(c);
-    }
-
     /// The class defines tensor op scalar ... here define scalar op tensor.
     template <typename T, typename Q>
     typename IsSupported < TensorTypeData<Q>, GenTensor<T> >::type
@@ -1254,6 +1244,7 @@ namespace madness {
 #if HAVE_GENTENSOR
 #ifdef USE_LRT
 #include <madness/tensor/lowranktensor.h>
+#include <madness/tensor/SVDTensor.h>
 
 namespace madness {
 
@@ -1293,14 +1284,14 @@ public:
 
     std::string what_am_i() const {return TensorArgs::what_am_i(this->tensor_type());};
 
-    SRConf<T>& config() const {
-        MADNESS_ASSERT(this->type==TT_2D and (this->impl.svd));
-        return *this->impl.svd.get();
-    }
-    GenTensor<T> get_configs(const int& start, const int& end) const {
-        MADNESS_ASSERT(this->type==TT_2D and (this->impl.svd));
-        return GenTensor<T>(config().get_configs(start,end));
-    }
+//    SRConf<T>& config() const {
+//        MADNESS_ASSERT(this->type==TT_2D and (this->impl.svd));
+//        return *this->impl.svd.get();
+//    }
+//    GenTensor<T> get_configs(const int& start, const int& end) const {
+//        MADNESS_ASSERT(this->type==TT_2D and (this->impl.svd));
+//        return GenTensor<T>(config().get_configs(start,end));
+//    }
 
     /// deep copy of rhs by deep copying rhs.configs
     friend GenTensor<T> copy(const GenTensor<T>& rhs) {
@@ -1401,33 +1392,33 @@ GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_opti
 
 
 
-namespace archive {
-/// Serialize a tensor
-template <class Archive, typename T>
-struct ArchiveStoreImpl< Archive, GenTensor<T> > {
-
-    friend class GenTensor<T>;
-    /// Stores the GenTensor to an archive
-    static void store(const Archive& ar, const GenTensor<T>& t) {
-        LowRankTensor<T> tt(t);
-        ar & tt;
-    };
-};
-
-
-/// Deserialize a tensor ... existing tensor is replaced
-template <class Archive, typename T>
-struct ArchiveLoadImpl< Archive, GenTensor<T> > {
-
-    friend class GenTensor<T>;
-    /// Replaces this GenTensor with one loaded from an archive
-    static void load(const Archive& ar, GenTensor<T>& t) {
-        LowRankTensor<T> tt;
-        ar & tt;
-        t=tt;
-    };
-};
-};
+//namespace archive {
+///// Serialize a tensor
+//template <class Archive, typename T>
+//struct ArchiveStoreImpl< Archive, GenTensor<T> > {
+//
+//    friend class GenTensor<T>;
+//    /// Stores the GenTensor to an archive
+//    static void store(const Archive& ar, const GenTensor<T>& t) {
+//        LowRankTensor<T> tt(t);
+//        ar & tt;
+//    };
+//};
+//
+//
+///// Deserialize a tensor ... existing tensor is replaced
+//template <class Archive, typename T>
+//struct ArchiveLoadImpl< Archive, GenTensor<T> > {
+//
+//    friend class GenTensor<T>;
+//    /// Replaces this GenTensor with one loaded from an archive
+//    static void load(const Archive& ar, GenTensor<T>& t) {
+//        LowRankTensor<T> tt;
+//        ar & tt;
+//        t=tt;
+//    };
+//};
+//};
 
 }
 #endif /* USE_LRT */

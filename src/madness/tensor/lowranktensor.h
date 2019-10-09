@@ -36,39 +36,20 @@
 
 #include <memory>
 #include <vector>
+#include <variant>
 
-#include "../world/madness_exception.h"
-#include "../world/print.h"
-#include "gentensor.h"
-#include "slice.h"
+#include <madness/world/madness_exception.h>
+#include <madness/world/print.h>
+#include <madness/tensor/gentensor.h>
+#include <madness/tensor/slice.h>
 #include "srconf.h"
+#include <madness/tensor/SVDTensor.h>
 #include "tensor.h"
 #include "tensortrain.h"
 #include "type_data.h"
 
 namespace madness {
 
-template<typename T>
-class SVDTensor : public SRConf<T> {
-public:
-    using SRConf<T>::SRConf;
-
-    explicit SVDTensor() : SRConf<T>() {    }
-    explicit SVDTensor(const Tensor<T>& rhs) : SRConf<T>(rhs) {    }
-    explicit SVDTensor(const SVDTensor<T>& rhs) : SRConf<T>(static_cast<SRConf<T> >(rhs)) {    }
-    explicit SVDTensor(const SRConf<T>& rhs) : SRConf<T>(SRConf<T>(rhs)) {    }
-    explicit SVDTensor(const std::vector<long>& dims) : SRConf<T>(dims.size(),dims[0],TT_2D) {    }
-    explicit SVDTensor(const Tensor<double>& weights, const Tensor<T>& vector1,
-            const Tensor<T>& vector2, const unsigned int& dim,
-            const unsigned int maxk) : SRConf<T>(weights,
-                    vector1, vector2, dim, maxk ) {}
-
-    SVDTensor& operator=(const T& number) {
-        SRConf<T>& base=*this;
-        base=number;
-        return *this;
-    }
-};
 
 // forward declaration
 template <class T> class SliceLowRankTensor;
@@ -85,38 +66,17 @@ public:
     /// C++ typename of the floating point type associated with scalar real type
     typedef typename TensorTypeData<T>::float_scalar_type float_scalar_type;
 
-      struct implT {
-        std::shared_ptr<Tensor<T> > full;
-        std::shared_ptr<TensorTrain<T> > tt;
-        std::shared_ptr<SVDTensor<T> > svd;
-
-        /// ctor resets all shared_ptr
-        implT() : full(), tt(), svd() {}
-
-        /// make sure only a single pointer is set
-        void check_unique() const {
-            MADNESS_CHECK(full.get() xor tt.get() xor svd.get());
-        }
-    };
-
-    TensorType type;
-    implT impl;
-
     /// empty ctor
-    LowRankTensor() : type(TT_NONE) {}
+    LowRankTensor() = default;
 
     /// copy ctor, shallow
-    LowRankTensor(const LowRankTensor<T>& other) : type(other.type),
-            impl(other.impl) {
-    }
+    LowRankTensor(const LowRankTensor<T>& other) = default;
 
     /// ctor with dimensions; constructs tensor filled with zeros
-    LowRankTensor(const std::vector<long>& dim, const TensorType& tt)
-        : type(tt) {
-
-        if (type==TT_FULL) impl.full=std::shared_ptr<Tensor<T> >(new Tensor<T>(dim));
-        if (type==TT_2D) impl.svd=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(dim));
-        if (type==TT_TENSORTRAIN) impl.tt=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(dim));
+    LowRankTensor(const std::vector<long>& dim, const TensorType& tt) {
+        if (tt==TT_FULL) tensor=Tensor<T>(dim);
+        if (tt==TT_2D) tensor=SVDTensor<T>(dim);
+        if (tt==TT_TENSORTRAIN) tensor=TensorTrain<T>(dim);
     }
 
     /// ctor with dimensions; constructs tensor filled with zeros
@@ -135,88 +95,62 @@ public:
     }
 
     /// ctor with a regular Tensor and arguments, deep
-    LowRankTensor(const Tensor<T>& rhs, const TensorArgs& targs)
-        : type(targs.tt) {
-
-        if (not rhs.has_data()) {
-            type=TT_NONE;
-
-        } else {
-
-            // deep copy, either explicitly (full) or implicitly (SVD, TensorTrain)
-            if (type==TT_FULL) {
-                impl.full=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(rhs)));
-
-            } else if ((type==TT_2D) or (type==TT_TENSORTRAIN)) {
-
-                // construct tensortrain first, convert into SVD format afterwards
-                std::shared_ptr<TensorTrain<T> > tt(new TensorTrain<T>(rhs,targs.thresh*facReduce()));
-
-                if (type==TT_2D) {
-                    Tensor<T> U,VT;
-                    Tensor< typename Tensor<T>::scalar_type > s;
-                    tt->two_mode_representation(U,VT,s);
-                    const long r=VT.dim(0);
-                    const long nd=VT.ndim();
-                    MADNESS_ASSERT(U.dim(nd-1)==r);
-
-                    // empty SVDTensor due to zero rank
-                    if (r==0) {
-                        impl.svd.reset(new SVDTensor<T>(tt->dims()));
-
-                    } else {
-                        Tensor<T> UU=U.reshape(U.size()/r,r);
-                        SVDTensor<T> sr(s, copy(transpose(UU)), VT.reshape(r,VT.size()/r),
-                                              rhs.ndim(), rhs.dim(0));
-                        sr.normalize();
-                        impl.svd.reset(new SVDTensor<T>(sr));
-                    }
-                } else if (type==TT_TENSORTRAIN) {
-                    impl.tt=tt;
-                }
-            }
+    LowRankTensor(const Tensor<T>& rhs, const TensorArgs& targs) {
+        if (targs.tt==TT_FULL) tensor=copy(Tensor<T>(rhs));
+        else if (targs.tt==TT_2D) tensor=SVDTensor<T>(rhs,targs.thresh*facReduce());
+        else if (targs.tt==TT_TENSORTRAIN) tensor=TensorTrain<T>(rhs,targs.thresh);
+        else {
+        	MADNESS_EXCEPTION("unknown tensor type in LowRankTensor constructor",1);
         }
     }
 
     /// ctor with a regular Tensor, deep
-    LowRankTensor(const Tensor<T>& other) : type(TT_FULL), impl() {
-        impl.full=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(other)));
-    }
+    LowRankTensor(const Tensor<T>& other) : tensor(other) {}
 
     /// ctor with a TensorTrain as argument, shallow
-    LowRankTensor(const TensorTrain<T>& tt) : type(TT_TENSORTRAIN), impl() {
-        impl.tt=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(tt));
-    }
+    LowRankTensor(const TensorTrain<T>& other) : tensor(other) {}
 
     /// ctor with a SVDTensor as argument, shallow
-    LowRankTensor(const SVDTensor<T>& t) : type(TT_2D), impl() {
-        impl.svd=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(t));
-    }
+    LowRankTensor(const SVDTensor<T>& other) : tensor(other) {}
 
     /// ctor with a SliceLowRankTensor as argument, deep
-    LowRankTensor(const SliceLowRankTensor<T>& other) : type(other.lrt.type), impl() {
+    LowRankTensor(const SliceLowRankTensor<T>& other) {
         *this=other;
     }
 
     /// shallow assignment operator
     LowRankTensor& operator=(const LowRankTensor<T>& other) {
-        if (this!=&other) {
-            type=other.type;
-            impl=other.impl;
-        }
+        if (this!=&other) tensor=other.tensor;
+        return *this;
+    }
+
+    /// shallow assignment operator
+    LowRankTensor& operator=(const Tensor<T>& other) {
+        tensor=other;
+        return *this;
+    }
+
+    /// shallow assignment operator
+    LowRankTensor& operator=(const SVDTensor<T>& other) {
+        tensor=other;
+        return *this;
+    }
+
+    /// shallow assignment operator
+    LowRankTensor& operator=(const TensorTrain<T>& other) {
+        tensor=other;
         return *this;
     }
 
     /// deep assignment with slices: g0 = g1(s)
     LowRankTensor& operator=(const SliceLowRankTensor<T>& other) {
-        type=other.lrt.type;
         const std::vector<Slice>& s=other.thisslice;
-        if (this->type==TT_FULL)
-            impl.full.reset(new Tensor<T>(copy((*other.lrt.impl.full)(s))));
-        else if (this->type==TT_2D)
-            impl.svd.reset(new SVDTensor<T>(other.lrt.impl.svd->copy_slice(s)));
-        else if (this->type==TT_TENSORTRAIN)
-            impl.tt.reset(new TensorTrain<T>(copy(*(other.lrt.impl.tt),s)));
+        if (this->tensor_type()==TT_FULL)
+            tensor=copy(other.get_tensor()(s));
+        else if (this->tensor_type()==TT_2D)
+            tensor=other.get_svdtensor().copy_slice(s);
+        else if (this->tensor_type()==TT_TENSORTRAIN)
+            tensor=copy(other.get_tensortrain(),s);
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -227,18 +161,47 @@ public:
     template <class Q> operator LowRankTensor<Q>() const { // type conv => deep copy
 
         LowRankTensor<Q> result;
-        if (this->type==TT_FULL) {
-            result.impl.full.reset(new Tensor<Q>(*impl.full));
-        } else if (this->type==TT_2D) {
+        if (this->tensor_type()==TT_FULL) {
+            result=Tensor<Q>(get_tensor());
+        } else if (this->tensor_type()==TT_2D) {
             MADNESS_EXCEPTION("no type conversion for TT_2D yes=t",1);
-        } else if (this->type==TT_TENSORTRAIN) {
-            result.impl.tt.reset(new TensorTrain<Q>(*impl.tt));
+        } else if (this->tensor_type()==TT_TENSORTRAIN) {
+            MADNESS_EXCEPTION("no type conversion for TT_2D yes=t",1);
         } else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
         return result;
     }
 
+    SVDTensor<T>& get_svdtensor() {
+         if (SVDTensor<T>* test=std::get_if<SVDTensor<T> >(&tensor)) return *test;
+         MADNESS_EXCEPTION("failure to return SVDTensor from LowRankTensor",1);
+     }
+
+    const SVDTensor<T>& get_svdtensor() const {
+         if (const SVDTensor<T>* test=std::get_if<SVDTensor<T> >(&tensor)) return *test;
+         MADNESS_EXCEPTION("failure to return SVDTensor from LowRankTensor",1);
+    }
+
+    Tensor<T>& get_tensor() {
+        if (Tensor<T>* test=std::get_if<Tensor<T> >(&tensor)) return *test;
+        MADNESS_EXCEPTION("failure to return Tensor from LowRankTensor",1);
+     }
+
+    const Tensor<T>& get_tensor() const {
+        if (const Tensor<T>* test=std::get_if<Tensor<T> >(&tensor)) return *test;
+        MADNESS_EXCEPTION("failure to return Tensor from LowRankTensor",1);
+     }
+
+    TensorTrain<T>& get_tensortrain() {
+        if (TensorTrain<T>* test=std::get_if<TensorTrain<T> >(&tensor)) return *test;
+        MADNESS_EXCEPTION("failure to return TensorTrain from LowRankTensor",1);
+    }
+
+    const TensorTrain<T>& get_tensortrain() const {
+        if (const TensorTrain<T>* test=std::get_if<TensorTrain<T> >(&tensor)) return *test;
+        MADNESS_EXCEPTION("failure to return TensorTrain from LowRankTensor",1);
+    }
 
     /// general slicing, shallow; for temporary use only!
     SliceLowRankTensor<T> operator()(const std::vector<Slice>& s) {
@@ -251,8 +214,6 @@ public:
     }
 
 
-
-//    /// shallow assignment operator
 //    LowRankTensor& operator=(const double& fac) {
 //        MADNESS_EXCEPTION("no assignment of numbers in LowRankTensor",1);
 //        return *this;
@@ -260,162 +221,78 @@ public:
 
     /// deep copy
     friend LowRankTensor copy(const LowRankTensor& other) {
-        LowRankTensor result;
-        result.type=other.type;
-        if (other.type==TT_FULL)
-            result.impl.full=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(*other.impl.full)));
-        if (other.type==TT_2D)
-            result.impl.svd=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(copy(*other.impl.svd)));
-        if (other.type==TT_TENSORTRAIN)
-            result.impl.tt=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(copy(*other.impl.tt)));
+    	LowRankTensor<T> result;
+        std::visit([&result](auto& obj) {result=copy(obj);}, other.tensor);
         return result;
     }
 
     /// return the tensor type
-    TensorType tensor_type() const {return type;}
+    TensorType tensor_type() const {
+    	if (std::holds_alternative<SVDTensor<T> >(tensor)) return TT_2D;
+    	if (std::holds_alternative<Tensor<T> >(tensor)) return TT_FULL;
+    	if (std::holds_alternative<TensorTrain<T> >(tensor)) return TT_TENSORTRAIN;
+    	MADNESS_EXCEPTION("confused tensor types ",1);
+    }
+
+    template<typename Q, typename R>
+    friend bool is_same_tensor_type(const LowRankTensor<R>& rhs, const LowRankTensor<Q>& lhs) {
+    	return (rhs.tensor.index()==lhs.tensor.index());
+    }
 
     /// convert this to a new LowRankTensor of given tensor type
     LowRankTensor convert(const TensorArgs& targs) const {
 
         // fast return if old and new type are identical
-        if (this->tensor_type()==targs.tt) return copy(*this);
+    	if (targs.tt==tensor_type()) return copy(*this);
 
-        LowRankTensor result;
+    	// target is full tensor
+    	if (targs.tt==TT_FULL) return this->full_tensor_copy();
 
-        if (tensor_type()==TT_FULL) {
-            // TT_FULL -> TT_SVD
-            // TT_FULL -> TT_TENSORTRAIN
-            result=LowRankTensor(*impl.full,targs);
+    	// source is full tensor: construct the corresponding representation
+    	if (tensor_type()==TT_FULL) return LowRankTensor<T>(get_tensor(),targs);
 
-        } else if (tensor_type()==TT_2D) {
+    	// TT_TENSORTRAIN TO TT_2D
+    	if ((tensor_type()==TT_TENSORTRAIN) and (targs.tt==TT_2D)) {
+			Tensor<T> U,VT;
+			Tensor< typename Tensor<T>::scalar_type > s;
+			get_tensortrain().two_mode_representation(U, VT, s);
+			long rank=s.size();
+			if (rank==0) return SVDTensor<T>(get_tensortrain().ndim(),get_tensortrain().dims(),ndim()/2);
 
-            // TT_SVD -> TT_FULL
-            if (targs.tt==TT_FULL) result=LowRankTensor(this->reconstruct_tensor(),targs);
+			long n=1,m=1;
+			for (int i=0; i<U.ndim()-1; ++i) n*=U.dim(i);
+			for (int i=1; i<VT.ndim(); ++i) m*=VT.dim(i);
+			MADNESS_ASSERT(rank*n==U.size());
+			MADNESS_ASSERT(rank*m==VT.size());
+			U=copy(transpose(U.reshape(n,rank)));   // make it contiguous
+			VT=VT.reshape(rank,m);
+			SVDTensor<T> svdtensor(s, U, VT, ndim(), dim(0));
+    		return LowRankTensor<T>(svdtensor);
+    	}
 
-            // TT_SVD -> TT_TENSORTRAIN
-            else if (targs.tt==TT_TENSORTRAIN) {
-
-                // extract core tensors from SVD representation
-                Tensor< typename Tensor<T>::scalar_type >& s=impl.svd->weights_;
-                const Tensor<T>& U=impl.svd->ref_vector(0); // (r,k,k,..,k)
-                const Tensor<T>& VT=impl.svd->ref_vector(1);    // (r,k,k,..,k)
-
-                const long rank=s.size();
-
-                if (rank==0) {
-                    std::vector<long> dims(this->ndim());
-                    for (int i=0; i<dims.size(); ++i) dims[i]=this->dim(i);
-                    result=LowRankTensor(dims,targs);
-                } else {
-
-                    // convolve singular values into U/ core[0]
-                    std::vector<Tensor<T> > core(2);
-                    core[0]=transpose(U.reshape(rank,U.size()/rank));   // (k^n,r)
-                    for (int j=0; j<core[0].dim(0); ++j) core[0](j,_).emul(s);
-
-                    core[1]=VT.reshape(rank,VT.size()/rank);        // (r,k^m)
-
-                    // construct TensorTrain with 2 dimensions only
-                    result=LowRankTensor(core);
-
-                    // set correct dimensions
-                    const long k=impl.svd->get_k();
-                    for (long d=0; d<impl.svd->dim(); ++d) {
-                        if (result.dim(d)==k) continue;
-
-                        const long k1=k;
-                        const long k2=result.dim(d)/k1;
-                        result=result.impl.tt->splitdim(d,k1,k2,targs.thresh*facReduce());
-                    }
-                }
-            } else {
-                MADNESS_EXCEPTION("confused tensor types in convert TT_SVD -> ?",1);
-            }
-
-        } else if (tensor_type()==TT_TENSORTRAIN) {
-
-            if (targs.tt==TT_FULL) {
-
-                // TT_TENSORTRAIN -> TT_FULL
-                result=LowRankTensor(this->reconstruct_tensor(),targs);
-
-            } else {
-
-                // TT_TENSORTRAIN -> TT_SVD
-                Tensor<T> U,VT;
-                Tensor< typename Tensor<T>::scalar_type > s;
-                impl.tt->two_mode_representation(U, VT, s);
-                long rank=s.size();
-                if (rank>0) {
-                    long n=1,m=1;
-                    for (int i=0; i<U.ndim()-1; ++i) n*=U.dim(i);
-                    for (int i=1; i<VT.ndim(); ++i) m*=VT.dim(i);
-                    MADNESS_ASSERT(rank*n==U.size());
-                    MADNESS_ASSERT(rank*m==VT.size());
-                    U=copy(transpose(U.reshape(n,rank)));   // make it contiguous
-                    VT=VT.reshape(rank,m);
-                    SVDTensor<T> svdtensor(s, U, VT, ndim(), dim(0));
-                    result=LowRankTensor<T>(svdtensor);
-                } else {
-                    SVDTensor<T> svdtensor(ndim(), dim(0), TT_2D);
-                    result=LowRankTensor<T>(svdtensor);
-                }
-            }
-
-        } else {
-            MADNESS_EXCEPTION("unknown tensor type in LowRankTensor::convert",1);
-        }
-
-        return result;
+    	print("conversion from type ",tensor_type(), "to type", targs.tt,"not supported");
+    	MADNESS_EXCEPTION("type conversion not supported in LowRankTensor::convert ",1);
+    	return *this;
     }
 
-    long ndim() const {
-        if (type==TT_NONE) return -1;
-        else if (type==TT_FULL) return impl.full->ndim();
-        else if (type==TT_2D) return impl.svd->dim();
-        else if (type==TT_TENSORTRAIN) return impl.tt->ndim();
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return -1;
-    }
+    long ndim() const {return ptr()->ndim();}
 
     /// return the number of entries in dimension i
-    long dim(const int i) const {
-        if (type==TT_NONE) return -1;
-        else if (type==TT_FULL) return impl.full->dim(i);
-        else if (type==TT_2D) return impl.svd->get_k();
-        else if (type==TT_TENSORTRAIN) return impl.tt->dim(i);
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return -1;
-    }
-
+    long dim(const int i) const {return ptr()->dim(i);}
 
     void normalize() {
-        if (type==TT_2D) impl.svd->normalize();
+        if (tensor_type()==TT_2D) get_svdtensor().normalize();
     }
 
     float_scalar_type normf() const {
-        if (type==TT_NONE) return 0.0;
-        else if (type==TT_FULL) return impl.full->normf();
-        else if (type==TT_2D) return impl.svd->normf();
-        else if (type==TT_TENSORTRAIN) return impl.tt->normf();
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return 0;
+    	float_scalar_type norm;
+        std::visit([&norm](auto& obj) {norm=obj.normf();}, tensor);
+        return norm;
     }
 
     float_scalar_type svd_normf() const {
-        if (type==TT_FULL) return impl.full->normf();
-        else if (type==TT_2D) return impl.svd->svd_normf();
-        else if (type==TT_TENSORTRAIN) return impl.tt->normf();
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return 0;
+        MADNESS_EXCEPTION("recode svd_normf in lowranktensor",1);
+        return 0.0;
     }
 
 
@@ -426,21 +303,15 @@ public:
     template <typename Q>
     typename IsSupported<TensorTypeData<Q>,LowRankTensor<T>&>::type
     scale(Q fac) {
-        if (type==TT_NONE) return *this;
-        else if (type==TT_FULL) impl.full->scale(T(fac));
-        else if (type==TT_2D) impl.svd->scale(T(fac));
-        else if (type==TT_TENSORTRAIN) impl.tt->scale(T(fac));
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
+        std::visit([&fac](auto& obj) {obj.scale(T(fac));}, tensor);
         return *this;
     }
 
     Tensor<T> full_tensor_copy() const {
-        if (type==TT_NONE) return Tensor<T>();
-        else if (type==TT_FULL) return copy(*impl.full);
-        else if (type==TT_2D) return impl.svd->reconstruct();
-        else if (type==TT_TENSORTRAIN) return impl.tt->reconstruct();
+        if (tensor_type()==TT_NONE) return Tensor<T>();
+        else if (tensor_type()==TT_FULL) return copy(get_tensor());
+        else if (tensor_type()==TT_2D) return get_svdtensor().reconstruct();
+        else if (tensor_type()==TT_TENSORTRAIN) return get_tensortrain().reconstruct();
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -448,21 +319,19 @@ public:
     }
 
     const Tensor<T>& full_tensor() const {
-        MADNESS_ASSERT(type==TT_FULL);
-        return *impl.full;
+    	return get_tensor();
     }
 
     Tensor<T>& full_tensor() {
-        MADNESS_ASSERT(type==TT_FULL);
-        return *impl.full;
+    	return get_tensor();
     }
 
 
     /// reconstruct this to return a full tensor
     Tensor<T> reconstruct_tensor() const {
 
-        if (type==TT_FULL) return full_tensor();
-        else if (type==TT_2D or type==TT_TENSORTRAIN) return full_tensor_copy();
+        if (tensor_type()==TT_FULL) return full_tensor();
+        else if (tensor_type()==TT_2D or tensor_type()==TT_TENSORTRAIN) return full_tensor_copy();
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -474,11 +343,11 @@ public:
     static double fac_reduce() {return 1.e-3;}
 
     long rank() const {
-        if (type==TT_NONE) return 0;
-        else if (type==TT_FULL) return -1;
-        else if (type==TT_2D) return impl.svd->rank();
-        else if (type==TT_TENSORTRAIN) {
-            std::vector<long> r=impl.tt->ranks();
+        if (tensor_type()==TT_NONE) return 0;
+        else if (tensor_type()==TT_FULL) return -1;
+        else if (tensor_type()==TT_2D) return get_svdtensor().rank();
+        else if (tensor_type()==TT_TENSORTRAIN) {
+            std::vector<long> r=get_tensortrain().ranks();
             return *(std::max_element(r.begin(), r.end()));
         }
         else {
@@ -487,26 +356,19 @@ public:
         return 0l;
     }
 
-    bool has_data() const {return (type != TT_NONE);}
+    bool has_data() const {return (tensor_type() != TT_NONE);}
 
     bool has_no_data() const {return (not has_data());}
 
     long size() const {
-        if (type==TT_NONE) return 0l;
-        else if (type==TT_FULL) return impl.full->size();
-        else if (type==TT_2D) return impl.svd->nCoeff();
-        else if (type==TT_TENSORTRAIN) return impl.tt->size();
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return false;
+    	return ptr()->size();
     }
 
     long real_size() const {
-        if (type==TT_NONE) return 0l;
-        else if (type==TT_FULL) return impl.full->size();
-        else if (type==TT_2D) return impl.svd->real_size();
-        else if (type==TT_TENSORTRAIN) return impl.tt->real_size();
+        if (tensor_type()==TT_NONE) return 0l;
+        else if (tensor_type()==TT_FULL) return get_tensor().size();
+        else if (tensor_type()==TT_2D) return get_svdtensor().real_size();
+        else if (tensor_type()==TT_TENSORTRAIN) return get_tensortrain().real_size();
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -524,12 +386,11 @@ public:
         // fast return if possible
         if ((this->rank()==0) or (rhs.rank()==0)) return resultT(0.0);
 
-        MADNESS_ASSERT(this->type==rhs.type);
+    	MADNESS_ASSERT(is_same_tensor_type(*this,rhs));
 
-        if (type==TT_NONE) return resultT(0.0);
-        else if (type==TT_FULL) return impl.full->trace_conj(*(rhs.impl.full));
-        else if (type==TT_2D) return overlap(*impl.svd,*(rhs.impl.svd));
-        else if (type==TT_TENSORTRAIN) return impl.tt->trace(*rhs.impl.tt);
+        if (tensor_type()==TT_FULL) return get_tensor().trace_conj(rhs.get_tensor());
+        else if (tensor_type()==TT_2D) return trace(get_svdtensor(),rhs.get_svdtensor());
+        else if (tensor_type()==TT_TENSORTRAIN) return get_tensortrain().trace(rhs.get_tensortrain());
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -544,9 +405,21 @@ public:
         return result;
     }
 
+    LowRankTensor operator+(const LowRankTensor& other) {
+    	LowRankTensor<T> result=copy(*this);
+        result.gaxpy(1.0,other,1.0);
+        return result;
+    }
+
     LowRankTensor& operator+=(const LowRankTensor& other) {
         gaxpy(1.0,other,1.0);
         return *this;
+    }
+
+    LowRankTensor operator-(const LowRankTensor& other) {
+    	LowRankTensor<T> result=copy(*this);
+        result.gaxpy(1.0,other,-1.0);
+        return result;
     }
 
     LowRankTensor& operator-=(const LowRankTensor& other) {
@@ -556,121 +429,62 @@ public:
 
     LowRankTensor& gaxpy(const T alpha, const LowRankTensor& other, const T beta) {
 
-        if (this->type != TT_NONE) MADNESS_ASSERT(this->type==other.type);
-
-        // fast return if possible
-        if (this->type==TT_NONE) {
-            *this=other*beta;
-        } else if (type==TT_FULL) {
-            impl.full->gaxpy(alpha,*other.impl.full,beta);
-        } else if (type==TT_2D) {
-            if (not (alpha==1.0)) this->scale(alpha);
-            impl.svd->append(*other.impl.svd,beta);
-        } else if (type==TT_TENSORTRAIN) {
-            impl.tt->gaxpy(alpha,*other.impl.tt,beta);
-        } else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
+    	// deliberately excluding gaxpys for different tensors due to efficiency considerations!
+    	MADNESS_ASSERT(is_same_tensor_type(*this,other));
+    	if (tensor_type()==TT_FULL) get_tensor().gaxpy(alpha,other.get_tensor(),beta);
+    	else if (tensor_type()==TT_2D) get_svdtensor().gaxpy(alpha,other.get_svdtensor(),beta);
+    	else if (tensor_type()==TT_TENSORTRAIN) get_tensortrain().gaxpy(alpha,other.get_tensortrain(),beta);
+    	else {
+    		MADNESS_EXCEPTION("unknown tensor type in LowRankTensor::gaxpy",1);
+    	}
         return *this;
     }
 
     /// assign a number to this tensor
     LowRankTensor& operator=(const T& number) {
-        if (type==TT_FULL) {
-            *impl.full=number;
-        } else if (type==TT_2D) {
-            *impl.svd=number;
-        } else if (type==TT_TENSORTRAIN) {
-            *impl.tt=number;
-        } else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
+        std::visit([&number](auto& obj) {obj=number;}, tensor);
         return *this;
-
     }
 
     void add_SVD(const LowRankTensor& other, const double& thresh) {
-        if (type==TT_FULL) impl.full->operator+=(*other.impl.full);
-        else if (type==TT_2D) impl.svd->add_SVD((*other.impl.svd),thresh*facReduce());
-        else if (type==TT_TENSORTRAIN) impl.tt->operator+=(*other.impl.tt);
+        if (tensor_type()==TT_FULL) get_tensor()+=get_tensor();
+        else if (tensor_type()==TT_2D) get_svdtensor().add_SVD(other.get_svdtensor(),thresh*facReduce());
+        else if (tensor_type()==TT_TENSORTRAIN) get_tensortrain()+=(other.get_tensortrain());
         else {
-            MADNESS_EXCEPTION("you should not be here",1);
+    		MADNESS_EXCEPTION("unknown tensor type in LowRankTensor::add_SVD",1);
         }
     }
 
     /// Inplace multiply by corresponding elements of argument Tensor
     LowRankTensor<T>& emul(const LowRankTensor<T>& other) {
 
-        // fast return if possible
-        if (this->type==TT_NONE or other.type==TT_NONE) {
-            MADNESS_EXCEPTION("no TT_NONE in LowRankTensor::emul",1);
-        }
+    	// deliberately excluding emuls for different tensors due to efficiency considerations!
+    	MADNESS_ASSERT(is_same_tensor_type(*this,other));
 
-        MADNESS_ASSERT(this->type==other.type);
-
-        if (type==TT_FULL) {
-            impl.full->emul(*other.impl.full);
-        } else if (type==TT_2D) {
-            impl.svd->emul(*other.impl.svd);
-        } else if (type==TT_TENSORTRAIN) {
-            impl.tt->emul(*other.impl.tt);
-        } else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
+        // binary operation with the visitor pattern
+//        std::visit([&other](auto& obj) {obj.emul(other.tensor);}, tensor);
+    	if (tensor_type()==TT_FULL) get_tensor().emul(other.get_tensor());
+    	else if (tensor_type()==TT_2D) get_svdtensor().emul(other.get_svdtensor());
+    	else if (tensor_type()==TT_TENSORTRAIN) get_tensortrain().emul(other.get_tensortrain());
+    	else {
+    		MADNESS_EXCEPTION("unknown tensor type in LowRankTensor::gaxpy",1);
+    	}
         return *this;
+
     }
-
-
 
     void reduce_rank(const double& thresh) {
-        if ((type==TT_FULL) or (type==TT_NONE)) return;
-        else if (type==TT_2D) impl.svd->divide_and_conquer_reduce(thresh*facReduce());
-        else if (type==TT_TENSORTRAIN) impl.tt->truncate(thresh*facReduce());
+
+        if ((tensor_type()==TT_FULL) or (tensor_type()==TT_NONE)) return;
+        else if (tensor_type()==TT_2D) get_svdtensor().divide_and_conquer_reduce(thresh*facReduce());
+        else if (tensor_type()==TT_TENSORTRAIN) get_tensortrain().truncate(thresh*facReduce());
         else {
-            MADNESS_EXCEPTION("you should not be here",1);
+    		MADNESS_EXCEPTION("unknown tensor type in LowRankTensor::reduce_rank",1);
         }
     }
 
-    /// Returns a pointer to the internal data
 
-    /// @param[in]  ivec    index of core vector to which the return values points
-    T* ptr(const int ivec=0) {
-        if (type==TT_NONE) return 0;
-        else if (type==TT_FULL) return impl.full->ptr();
-        else if (type==TT_2D) return impl.svd->ref_vector(ivec).ptr();
-        else if (type==TT_TENSORTRAIN) return impl.tt->ptr(ivec);
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return 0;
-    }
-
-    /// Returns a pointer to the internal data
-
-    /// @param[in]  ivec    index of core vector to which the return values points
-    const T* ptr(const int ivec=0) const {
-        if (type==TT_NONE) return 0;
-        else if (type==TT_FULL) return impl.full->ptr();
-        else if (type==TT_2D) return impl.svd->ref_vector(ivec).ptr();
-        else if (type==TT_TENSORTRAIN) return impl.tt->ptr(ivec);
-        else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        return 0;
-    }
-
-
-    SRConf<T>& config() {
-        MADNESS_EXCEPTION("implement config in LowRankTensor",1);
-    }
-
-    void method1() {
-        if (type == TT_FULL) impl.full->method1();
-        if (type == TT_2D) impl.svd->method1();
-        if (type == TT_TENSORTRAIN) impl.tt->method1();
-        // etc.
-    }
-
+public:
 
     /// Transform all dimensions of the tensor t by the matrix c
 
@@ -682,27 +496,14 @@ public:
     /// The input dimensions of \c t must all be the same and agree with
     /// the first dimension of \c c .  The dimensions of \c c may differ in
     /// size.
-    template <typename Q>
-    LowRankTensor< TENSOR_RESULT_TYPE(T,Q) > transform(const Tensor<Q>& c) const {
-        typedef TENSOR_RESULT_TYPE(T,Q) resultT;
-
-        if (type==TT_NONE) return LowRankTensor<resultT>();
-        else if (type==TT_FULL) {
-            Tensor<resultT> result=madness::transform((*impl.full),c);
-            return LowRankTensor<resultT>(result,0.0,TT_FULL);
-        } else if (type==TT_2D) {
-            SVDTensor<resultT> result(impl.svd->transform(c));
-            return LowRankTensor<resultT>(result);
-        } else if (type==TT_TENSORTRAIN) {
-            TensorTrain<resultT> tt=madness::transform(*impl.tt,c);
-            return LowRankTensor(tt);
-        } else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        if (has_no_data()) return LowRankTensor<resultT>();
-        return LowRankTensor<resultT>();
+    template <typename R, typename Q>
+    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> transform(
+            const LowRankTensor<R>& t, const Tensor<Q>& c) {
+    	typedef TENSOR_RESULT_TYPE(R,Q) resultT;
+    	LowRankTensor<resultT> result;
+        std::visit([&result, &c](auto& obj) {result=transform(obj,c);}, t.tensor);
+        return result;
     }
-
 
     /// Transform all dimensions of the tensor t by distinct matrices c
 
@@ -713,28 +514,15 @@ public:
     /// result(i,j,k...) <-- sum(i',j', k',...) t(i',j',k',...) c[0](i',i) c[1](j',j) c[2](k',k) ...
     /// \endcode
     /// The first dimension of the matrices c must match the corresponding
-    /// dimension of t.
-    template <typename Q>
-    LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> general_transform(const Tensor<Q> c[]) const {
-        typedef TENSOR_RESULT_TYPE(T,Q) resultT;
-
-        if (type==TT_NONE) return LowRankTensor<resultT>();
-        else if (type==TT_FULL) {
-            Tensor<resultT> result=madness::general_transform((*impl.full),c);
-            return LowRankTensor<resultT>(result,0.0,TT_FULL);
-        } else if (type==TT_2D) {
-            SVDTensor<resultT> result(impl.svd->general_transform(c));
-            return LowRankTensor<resultT>(result);
-        } else if (type==TT_TENSORTRAIN) {
-            TensorTrain<resultT> tt=madness::general_transform((*impl.tt),c);
-            return LowRankTensor(tt);
-        } else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        if (has_no_data()) return LowRankTensor<resultT>();
-        return LowRankTensor<resultT>();
+    /// dimension of t.    template <typename R, typename Q>
+    template <typename R, typename Q>
+    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> general_transform(
+            const LowRankTensor<R>& t, const Tensor<Q> c[]) {
+    	typedef TENSOR_RESULT_TYPE(R,Q) resultT;
+    	LowRankTensor<resultT> result;
+        std::visit([&result, &c](auto& obj) {result=general_transform(obj,c);}, t.tensor);
+        return result;
     }
-
 
     /// Transforms one dimension of the tensor t by the matrix c, returns new contiguous tensor
 
@@ -742,30 +530,55 @@ public:
     /// \code
     /// transform_dir(t,c,1) = r(i,j,k,...) = sum(j') t(i,j',k,...) * c(j',j)
     /// \endcode
-    /// @param[in] t Tensor to transform (size of dimension to be transformed must match size of first dimension of \c c )
+    /// @param[in] t Tensor to transform (size of dim to be transformed must match size of first dim of \c c )
     /// @param[in] c Matrix used for the transformation
     /// @param[in] axis Dimension (or axis) to be transformed
-    /// @result Returns a new, contiguous tensor
-    template <typename Q>
-    LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> transform_dir(const Tensor<Q>& c, int axis) const {
-        typedef TENSOR_RESULT_TYPE(T,Q) resultT;
-
-        if (type==TT_NONE) return LowRankTensor<resultT>();
-        else if (type==TT_FULL) {
-            Tensor<resultT> result=madness::transform_dir((*impl.full),c,axis);
-            return LowRankTensor<resultT>(result,0.0,TT_FULL);
-        } else if (type==TT_2D) {
-            SVDTensor<resultT> result(impl.svd->transform_dir(c,axis));
-            return LowRankTensor<resultT>(result);
-        } else if (type==TT_TENSORTRAIN) {
-            TensorTrain<resultT> tt=madness::transform_dir((*impl.tt),c,axis);
-            return LowRankTensor(tt);
-        } else {
-            MADNESS_EXCEPTION("you should not be here",1);
-        }
-        if (has_no_data()) return LowRankTensor<resultT>();
-        return LowRankTensor<resultT>();
+    /// @result Returns a new, contiguous tensor    template <typename R, typename Q>
+    template <typename R, typename Q>
+    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> transform_dir(
+            const LowRankTensor<R>& t, const Tensor<Q>& c, const int axis) {
+    	LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> result;
+        std::visit([&result, &c, &axis](auto& obj) {result=transform_dir(obj,c,axis);}, t.tensor);
+        return result;
     }
+
+    template <typename R, typename Q>
+    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> outer(
+            const LowRankTensor<R>& t1, const LowRankTensor<Q>& t2);
+
+    /// serialize this
+    template <typename Archive>
+    void serialize(Archive& ar) {
+
+    	int index=tensor.index();
+        ar & index;
+        // index is now correct for load and store
+
+        if (index==0) {
+            MADNESS_ASSERT(std::holds_alternative<Tensor<T> >(tensor));
+            ar & std::get<0>(tensor);
+        }
+        if (index==1) {
+            MADNESS_ASSERT(std::holds_alternative<SVDTensor<T> >(tensor));
+            ar & std::get<1>(tensor);
+        }
+        if (index==2) {
+            MADNESS_ASSERT(std::holds_alternative<TensorTrain<T> >(tensor));
+            ar & std::get<2>(tensor);
+        }
+
+    }
+
+private:
+
+    const BaseTensor* ptr() const {
+        const BaseTensor* p;
+        std::visit([&p](auto& obj) {p=dynamic_cast<const BaseTensor*>(&obj);}, tensor);
+        return p;
+    }
+
+    /// holding the implementation of the low rank tensor representations
+	std::variant<Tensor<T>, SVDTensor<T>, TensorTrain<T> > tensor;
 
 };
 
@@ -780,42 +593,15 @@ LowRankTensor<Q> convert(const LowRankTensor<T>& other) {
 	if (std::is_same<Q, T>::value) return copy(other);
 
 	LowRankTensor<Q> result;
-	result.type=other.type;
-    if (other.type==TT_FULL)
-        result.impl.full=std::shared_ptr<Tensor<Q> >(new Tensor<Q>(convert<Q,T>(*other.impl.full)));
-    if (other.type==TT_2D)
+    if (other.tensor_type()==TT_FULL)
+        result=Tensor<Q>(convert<Q,T>(other.get_tensor()));
+    if (other.tensor_type()==TT_2D)
         MADNESS_EXCEPTION("no type conversion for SVDTensors",1);
-    if (other.type==TT_TENSORTRAIN)
+    if (other.tensor_type()==TT_TENSORTRAIN)
         MADNESS_EXCEPTION("no type conversion for TensorTrain",1);
     return result;
 }
 
-
-template <class T, class Q>
-LowRankTensor< TENSOR_RESULT_TYPE(T,Q) > transform(const LowRankTensor<Q>& t, const Tensor<T>& c) {
-    return t.transform(c);
-}
-
-template <class T, class Q>
-LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> general_transform(const LowRankTensor<T>& t, const Tensor<Q> c[]) {
-    return t.general_transform(c);
-}
-
-/// Transforms one dimension of the tensor t by the matrix c, returns new contiguous tensor
-
-/// \ingroup tensor
-/// \code
-/// transform_dir(t,c,1) = r(i,j,k,...) = sum(j') t(i,j',k,...) * c(j',j)
-/// \endcode
-/// @param[in] t Tensor to transform (size of dim to be transformed must match size of first dim of \c c )
-/// @param[in] c Matrix used for the transformation
-/// @param[in] axis Dimension (or axis) to be transformed
-/// @result Returns a new, contiguous tensor
-template <class T, class Q>
-LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> transform_dir(const LowRankTensor<Q>& t,
-        const Tensor<T>& c, int axis) {
-    return t.transform_dir(c,axis);
-}
 
 /// outer product of two Tensors, yielding a low rank tensor
 
@@ -836,7 +622,7 @@ LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
 
     if (final_tensor_args.tt==TT_FULL) {
         MADNESS_ASSERT(t1.tensor_type()==TT_FULL);
-        Tensor<resultT> t(outer(*t1.impl.full,*t2.impl.full));
+        Tensor<resultT> t(outer(t1.get_tensor(),t2.get_tensor()));
         return LowRankTensor<resultT>(t);
 
     } else if (final_tensor_args.tt==TT_2D) {
@@ -864,7 +650,7 @@ LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
     } else if (final_tensor_args.tt==TT_TENSORTRAIN) {
         MADNESS_ASSERT(t1.tensor_type()==TT_TENSORTRAIN);
         MADNESS_ASSERT(t2.tensor_type()==TT_TENSORTRAIN);
-        return outer(*t1.impl.tt,*t2.impl.tt);
+        return outer(t1.get_tensortrain(),t2.get_tensortrain());
     } else {
         MADNESS_EXCEPTION("you should not be here",1);
     }
@@ -872,59 +658,59 @@ LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
 
 }
 
-
-namespace archive {
-    /// Serialize a tensor
-    template <class Archive, typename T>
-    struct ArchiveStoreImpl< Archive, LowRankTensor<T> > {
-
-        friend class LowRankTensor<T>;
-        /// Stores the GenTensor to an archive
-        static void store(const Archive& ar, const LowRankTensor<T>& t) {
-            bool exist=t.has_data();
-            int i=int(t.type);
-            ar & exist & i;
-            if (exist) {
-                if (t.impl.svd) ar & *t.impl.svd.get();
-                if (t.impl.full) ar & *t.impl.full.get();
-                if (t.impl.tt) ar & *t.impl.tt.get();
-            }
-        };
-    };
-
-
-    /// Deserialize a tensor ... existing tensor is replaced
-    template <class Archive, typename T>
-    struct ArchiveLoadImpl< Archive, LowRankTensor<T> > {
-
-        friend class GenTensor<T>;
-        /// Replaces this GenTensor with one loaded from an archive
-        static void load(const Archive& ar, LowRankTensor<T>& t) {
-            // check for pointer existence
-            bool exist=false;
-            int i=-1;
-            ar & exist & i;
-            t.type=TensorType(i);
-
-            if (exist) {
-                if (t.type==TT_2D) {
-                    SVDTensor<T> svd;
-                    ar & svd;
-                    t.impl.svd.reset(new SVDTensor<T>(svd));
-                } else if (t.type==TT_FULL) {
-                    Tensor<T> full;
-                    ar & full;
-                    t.impl.full.reset(new Tensor<T>(full));
-                } else if (t.type==TT_TENSORTRAIN) {
-                    TensorTrain<T> tt;
-                    ar & tt;
-                    t.impl.tt.reset(new TensorTrain<T>(tt));
-                }
-
-            }
-        };
-    };
-};
+//
+//namespace archive {
+//    /// Serialize a tensor
+//    template <class Archive, typename T>
+//    struct ArchiveStoreImpl< Archive, LowRankTensor<T> > {
+//
+//        friend class LowRankTensor<T>;
+//        /// Stores the GenTensor to an archive
+//        static void store(const Archive& ar, const LowRankTensor<T>& t) {
+//            bool exist=t.has_data();
+//            int i=int(t.type);
+//            ar & exist & i;
+//            if (exist) {
+//                if (t.impl.svd) ar & *t.impl.svd.get();
+//                if (t.impl.full) ar & *t.impl.full.get();
+//                if (t.impl.tt) ar & *t.impl.tt.get();
+//            }
+//        };
+//    };
+//
+//
+//    /// Deserialize a tensor ... existing tensor is replaced
+//    template <class Archive, typename T>
+//    struct ArchiveLoadImpl< Archive, LowRankTensor<T> > {
+//
+//        friend class GenTensor<T>;
+//        /// Replaces this GenTensor with one loaded from an archive
+//        static void load(const Archive& ar, LowRankTensor<T>& t) {
+//            // check for pointer existence
+//            bool exist=false;
+//            int i=-1;
+//            ar & exist & i;
+//            t.type=TensorType(i);
+//
+//            if (exist) {
+//                if (t.type==TT_2D) {
+//                    SVDTensor<T> svd;
+//                    ar & svd;
+//                    t.impl.svd.reset(new SVDTensor<T>(svd));
+//                } else if (t.type==TT_FULL) {
+//                    Tensor<T> full;
+//                    ar & full;
+//                    t.impl.full.reset(new Tensor<T>(full));
+//                } else if (t.type==TT_TENSORTRAIN) {
+//                    TensorTrain<T> tt;
+//                    ar & tt;
+//                    t.impl.tt.reset(new TensorTrain<T>(tt));
+//                }
+//
+//            }
+//        };
+//    };
+//};
 
 
 /// The class defines tensor op scalar ... here define scalar op tensor.
@@ -957,10 +743,9 @@ operator*(const Q& x, const LowRankTensor<T>& t) {
 
 /// implements a temporary(!) slice of a LowRankTensor
 template<typename T>
-class SliceLowRankTensor {
+class SliceLowRankTensor : public LowRankTensor<T> {
 public:
 
-    LowRankTensor<T> lrt;
     std::vector<Slice> thisslice;
 
     // all ctors are private, only accessible by GenTensor
@@ -970,7 +755,7 @@ public:
 
     /// ctor with a GenTensor; shallow
     SliceLowRankTensor<T> (const LowRankTensor<T>& gt, const std::vector<Slice>& s)
-            : lrt(gt), thisslice(s) {}
+    		: LowRankTensor<T>(gt), thisslice(s) {}
 
 public:
 
@@ -994,8 +779,6 @@ public:
         // fast return if possible
         if (rhs.has_no_data() or rhs.rank()==0) return *this;
 
-        if (lrt.has_data()) MADNESS_ASSERT(lrt.tensor_type()==rhs.tensor_type());
-
         // no fast return possible!!!
         //          if (this->rank()==0) {
         //              // this is a deep copy
@@ -1006,16 +789,14 @@ public:
 
         std::vector<Slice> rhs_slice(rhs.ndim(),Slice(_));
 
-        if (lrt.type==TT_FULL) {
-            (*lrt.impl.full)(thisslice).gaxpy(1.0,(*rhs.impl.full)(rhs_slice),1.0);
+        if (this->tensor_type()==TT_FULL) {
+            this->get_tensor()(thisslice).gaxpy(1.0,rhs.get_tensor(),1.0);
 
-        } else if (lrt.type==TT_2D) {
-            MADNESS_ASSERT(lrt.impl.svd->has_structure());
-            MADNESS_ASSERT(rhs.impl.svd->has_structure());
-            lrt.impl.svd->inplace_add(*rhs.impl.svd,thisslice,rhs_slice, 1.0, 1.0);
+        } else if (this->tensor_type()==TT_2D) {
+            this->get_svdtensor().inplace_add(rhs.get_svdtensor(),thisslice,rhs_slice, 1.0, 1.0);
 
-        } else if (lrt.type==TT_TENSORTRAIN) {
-            lrt.impl.tt->gaxpy(thisslice,*rhs.impl.tt,1.0,rhs_slice);
+        } else if (this->tensor_type()==TT_TENSORTRAIN) {
+            this->get_tensortrain().gaxpy(thisslice,rhs.get_tensortrain(),1.0,rhs_slice);
         }
         return *this;
     }
@@ -1025,8 +806,6 @@ public:
 
         // fast return if possible
         if (rhs.has_no_data() or rhs.rank()==0) return *this;
-
-        if (lrt.has_data()) MADNESS_ASSERT(lrt.tensor_type()==rhs.tensor_type());
 
         // no fast return possible!!!
         //          if (lrt.rank()==0) {
@@ -1038,16 +817,14 @@ public:
 
         std::vector<Slice> rhs_slice(rhs.ndim(),Slice(_));
 
-        if (lrt.type==TT_FULL) {
-            (*lrt.impl.full)(thisslice).gaxpy(1.0,(*rhs.impl.full)(rhs_slice),-1.0);
+        if (this->tensor_type()==TT_FULL) {
+            (this->impl.full)(thisslice).gaxpy(1.0,(rhs.get_tensor())(rhs_slice),-1.0);
 
-        } else if (lrt.type==TT_2D) {
-            MADNESS_ASSERT(lrt.impl.svd->has_structure());
-            MADNESS_ASSERT(rhs.impl.svd->has_structure());
-            lrt.impl.svd->inplace_add(*rhs.impl.svd,thisslice,rhs_slice, 1.0, -1.0);
+        } else if (this->tensor_type()==TT_2D) {
+            this->impl.svd->inplace_add(rhs.get_svdtensor(),thisslice,rhs_slice, 1.0, -1.0);
 
-        } else if (lrt.type==TT_TENSORTRAIN) {
-            lrt.impl.tt->gaxpy(thisslice,*rhs.impl.tt,-1.0,rhs_slice);
+        } else if (this->tensor_type()==TT_TENSORTRAIN) {
+            this->impl.tt->gaxpy(thisslice,rhs.get_tensortrain(),-1.0,rhs_slice);
         }
         return *this;
     }
@@ -1055,9 +832,9 @@ public:
     /// inplace addition as in g(s)+=g1(s)
     SliceLowRankTensor<T>& operator+=(const SliceLowRankTensor<T>& rhs) {
         // fast return if possible
-        if (rhs.lrt.has_no_data() or rhs.lrt.rank()==0) return *this;
+        if (rhs.has_no_data() or rhs.rank()==0) return *this;
 
-        if (lrt.has_data()) MADNESS_ASSERT(lrt.tensor_type()==rhs.lrt.tensor_type());
+        if (this->has_data()) MADNESS_ASSERT(this->tensor_type()==rhs.tensor_type());
 
         // no fast return possible!!!
         //          if (lrt.rank()==0) {
@@ -1069,16 +846,14 @@ public:
 
         std::vector<Slice> rhs_slice=rhs.thisslice;
 
-        if (lrt.type==TT_FULL) {
-            (*lrt.impl.full)(thisslice).gaxpy(1.0,(*rhs.lrt.impl.full)(rhs_slice),1.0);
+        if (this->tensor_type()==TT_FULL) {
+            this->get_tensor()(thisslice).gaxpy(1.0,(rhs.get_tensor())(rhs_slice),1.0);
 
-        } else if (lrt.type==TT_2D) {
-            MADNESS_ASSERT(lrt.impl.svd->has_structure());
-            MADNESS_ASSERT(rhs.lrt.impl.svd->has_structure());
-            lrt.impl.svd->inplace_add(*rhs.lrt.impl.svd,thisslice,rhs_slice, 1.0, 1.0);
+        } else if (this->tensor_type()==TT_2D) {
+            this->get_svdtensor().inplace_add(rhs.get_svdtensor(),thisslice,rhs_slice, 1.0, 1.0);
 
-        } else if (lrt.type==TT_TENSORTRAIN) {
-            lrt.impl.tt->gaxpy(thisslice,*rhs.lrt.impl.tt,1.0,rhs_slice);
+        } else if (this->tensor_type()==TT_TENSORTRAIN) {
+            this->get_tensortrain().gaxpy(thisslice,rhs.get_tensortrain(),1.0,rhs_slice);
         }
         return *this;
 
@@ -1088,16 +863,16 @@ public:
     SliceLowRankTensor<T>& operator=(const T& number) {
         MADNESS_ASSERT(number==T(0.0));
 
-        if (lrt.type==TT_FULL) {
-            (*lrt.impl.full)(thisslice)=0.0;
+        if (this->tensor_type()==TT_FULL) {
+            this->get_tensor()(thisslice)=0.0;
 
-        } else if (lrt.type==TT_2D) {
-            MADNESS_ASSERT(lrt.impl.svd->has_structure());
-            LowRankTensor<T> tmp(lrt);
-            lrt.impl.svd->inplace_add(*tmp.impl.svd,thisslice,thisslice, 1.0, -1.0);
+        } else if (this->tensor_type()==TT_2D) {
+            MADNESS_ASSERT(this->get_svdtensor().has_structure());
+            LowRankTensor<T> tmp(*this);
+            this->get_svdtensor().inplace_add(tmp.get_svdtensor(),thisslice,thisslice, 1.0, -1.0);
 
-        } else if (lrt.type==TT_TENSORTRAIN) {
-            lrt.impl.tt->gaxpy(thisslice,*lrt.impl.tt,-1.0,thisslice);
+        } else if (this->tensor_type()==TT_TENSORTRAIN) {
+            this->get_tensortrain().gaxpy(thisslice,this->get_tensortrain(),-1.0,thisslice);
         }
         return *this;
     }
@@ -1105,13 +880,12 @@ public:
     friend LowRankTensor<T> copy(const SliceLowRankTensor<T>& other) {
         LowRankTensor<T> result;
         const std::vector<Slice> s=other.thisslice;
-        result.type=other.lrt.type;
-        if (result.type==TT_FULL)
-            result.impl.full.reset(new Tensor<T>(copy((*other.lrt.impl.full)(s))));
-        else if (result.type==TT_2D)
-            result.impl.svd.reset(new SVDTensor<T>(other.lrt.impl.svd->copy_slice(s)));
-        else if (result.type==TT_TENSORTRAIN)
-            result.impl.tt.reset(new TensorTrain<T>(copy(*(other.lrt.impl.tt),s)));
+        if (result.tensor_type()==TT_FULL)
+            result=Tensor<T>(copy((other.get_tensor())(s)));
+        else if (result.tensor_type()==TT_2D)
+            result=SVDTensor<T>(other.get_svdtensor().copy_slice(s));
+        else if (result.tensor_type()==TT_TENSORTRAIN)
+            result=TensorTrain<T>(copy(other.get_tensortrain(),s));
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }

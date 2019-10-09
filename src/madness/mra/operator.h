@@ -1204,7 +1204,9 @@ namespace madness {
             typedef TENSOR_RESULT_TYPE(T,Q) resultT;
 
             // prepare access to the singular vectors
-            std::vector<Slice> s(coeff.config().dim_per_vector()+1,_);
+            const SVDTensor<T>& svdcoeff=coeff.get_svdtensor();
+//            std::vector<Slice> s(coeff.config().dim_per_vector()+1,_);
+            std::vector<Slice> s(svdcoeff.dim_per_vector(particle()-1)+1,_);
             // can't use predefined slices and vectors -- they have the wrong dimension
             const std::vector<Slice> s00(coeff.ndim(),Slice(0,k-1));
 
@@ -1239,8 +1241,8 @@ namespace madness {
                 // get the appropriate singular vector (left or right depends on particle)
                 // and apply the full tensor muopxv_fast on it, term by term
                 s[0]=Slice(r,r);
-                const Tensor<T> chunk=coeff.config().ref_vector(particle()-1)(s).reshape(2*k,2*k,2*k);
-                const Tensor<T> chunk0=f0.config().ref_vector(particle()-1)(s).reshape(k,k,k);
+                const Tensor<T> chunk=svdcoeff.ref_vector(particle()-1)(s).reshape(2*k,2*k,2*k);
+                const Tensor<T> chunk0=f0.get_svdtensor().ref_vector(particle()-1)(s).reshape(k,k,k);
 //                const double weight=std::abs(coeff.config().weights(r));
 
                 // accumulate all terms of the operator for a specific term of the function
@@ -1260,14 +1262,14 @@ namespace madness {
                 }
 
                 // reinsert the transformed terms into result, leaving the other particle unchanged
-                MADNESS_ASSERT(final.config().has_structure());
-                final.config().ref_vector(particle()-1)(s)=result;
+                MADNESS_ASSERT(final.get_svdtensor().has_structure());
+                final.get_svdtensor().ref_vector(particle()-1)(s)=result;
 
                 if (source.level()>0) {
-                    final0.config().ref_vector(particle()-1)(s)=result0;
+                    final0.get_svdtensor().ref_vector(particle()-1)(s)=result0;
                 } else {
-                    final0.config().ref_vector(0)(s)=0.0;
-                    final0.config().ref_vector(1)(s)=0.0;
+                    final0.get_svdtensor().ref_vector(0)(s)=0.0;
+                    final0.get_svdtensor().ref_vector(1)(s)=0.0;
                 }
 
             }
@@ -1354,13 +1356,13 @@ namespace madness {
                     // get maximum rank of coeff to contribute:
                     //  delta(g)  <  eps  <  || T || * delta(f)
                     //  delta(coeff) * || T || < tol2
-                	const int r_max=SRConf<T>::max_sigma(tol2/muop.norm,coeff.rank(),coeff.config().weights_);
+                	const int r_max=SRConf<T>::max_sigma(tol2/muop.norm,coeff.rank(),coeff.get_svdtensor().weights_);
                     //                	print("r_max",coeff.config().weights(r_max));
 
                 	// note that max_sigma is inclusive!
                     if (r_max>=0) {
-                        const GenTensor<resultT> chunk=input->get_configs(0,r_max);
-                        const GenTensor<resultT> chunk0=f0.get_configs(0,r_max);
+                        const GenTensor<resultT> chunk=input->get_svdtensor().get_configs(0,r_max);
+                        const GenTensor<resultT> chunk0=f0.get_svdtensor().get_configs(0,r_max);
 
                         double cpu0=cpu_time();
 
@@ -1427,7 +1429,7 @@ namespace madness {
                 // delta(g)  <  delta(T) * || f ||
                 if (muop.norm > tol) {
                 	// note that max_sigma is inclusive: it returns a slice w(Slice(0,i))
-                    long nterms=SRConf<T>::max_sigma(tol2/muop.norm,coeff.rank(),coeff.config().weights_)+1;
+                    long nterms=SRConf<T>::max_sigma(tol2/muop.norm,coeff.rank(),coeff.get_svdtensor().weights_)+1;
 
                     // take only the first overlap computation of rank reduction into account
                     low_cost+=nterms*low_operator_cost + 2.0*nterms*nterms*low_reduction_cost;
