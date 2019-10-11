@@ -134,7 +134,7 @@ namespace madness {
 	struct TensorArgs {
 		double thresh;
 		TensorType tt;
-        TensorArgs() : thresh(-1.0), tt(TT_NONE) {}
+        TensorArgs() : thresh(-1.0), tt(TT_FULL) {}
 		TensorArgs(const double& thresh1, const TensorType& tt1)
 			: thresh(thresh1)
 			, tt(tt1) {
@@ -162,7 +162,7 @@ namespace madness {
     /// true if GenTensor has zero rank or no data
     template<typename T>
     bool has_zero_rank(const GenTensor<T>& g) {
-    	return ((g.rank()==0) or (g.tensor_type()==TT_NONE));
+    	return (g.rank()==0);
     }
 
 
@@ -1308,6 +1308,8 @@ public:
 
     SliceGenTensor<T>(const SliceGenTensor<T>& g) : SliceLowRankTensor<T>(g) {}
     SliceGenTensor<T>(const SliceLowRankTensor<T>& g) : SliceLowRankTensor<T>(g) {}
+    SliceGenTensor<T>(const GenTensor<T>& g, const std::vector<Slice>& s)
+    		: SliceLowRankTensor<T>(g,s) {}
 
     operator SliceLowRankTensor<T>() const {return *this;}
     operator SliceLowRankTensor<T>() {return *this;}

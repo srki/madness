@@ -2061,7 +2061,8 @@ namespace madness {
             //result.get_impl()->recursive_apply(op, f.get_impl().get(),
             //        r1.get_impl().get(),true);          // will fence here
 
-
+           	result.world().gop.fence();
+           	result.print_size("result before finalization");
             double time=result.get_impl()->finalize_apply(fence);   // need fence before reconstruction
            	result.world().gop.fence();
             if (print_timings) {

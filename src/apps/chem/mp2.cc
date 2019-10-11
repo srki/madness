@@ -773,55 +773,17 @@ real_function_6d MP2::make_KffKphi0(const ElectronPair& pair) const {
 	const int j = pair.j;
 
 	real_function_6d KffKphi0;
-	real_function_6d r12nemo = CompositeFactory<double, 6, 3>(world).g12(
-			corrfac.f()).particle1(copy(hf->nemo(i))).particle2(
-					copy(hf->nemo(j)));
-	r12nemo.fill_tree().truncate().reduce_rank();
-	r12nemo.print_size("r12nemo");
-	//                save_function(r12nemo,"r12nemo");
+	real_function_6d r12nemo;
+//	r12nemo = CompositeFactory<double, 6, 3>(world).g12(
+//			corrfac.f()).particle1(copy(hf->nemo(i))).particle2(
+//					copy(hf->nemo(j)));
+//	r12nemo.fill_tree().truncate().reduce_rank();
+//	r12nemo.print_size("r12nemo");
+//	save_function(r12nemo,"r12nemo");
+	load_function(r12nemo,"r12nemo");
 
 	real_function_6d Kfphi0;
 	Kfphi0 = K(r12nemo, i == j);
-
-	//					const real_function_3d& phi_i=hf->nemo(i);
-	//					const real_function_3d& phi_j=hf->nemo(j);
-	//
-	//					real_convolution_3d op=CoulombOperator(world,0.0001,hf->get_calc().param.econv);
-	//					op.particle()=1;
-	//
-	//					real_convolution_3d op_mod=CoulombOperator(world,0.0001,hf->get_calc().param.econv);
-	//	                op_mod.modified()=true;
-	//
-	//					real_function_6d result=real_factory_6d(world);
-	//					for (int k=0; k<hf->nocc(); ++k) {
-	//						const real_function_3d& phi_k_bra=hf->R2orbital(k);
-	//						const real_function_3d& phi_k_ket=hf->nemo(k);
-	//						real_function_6d f_ijk=CompositeFactory<double,6,3>(world)
-	//								.g12(corrfac.f())
-	//								.particle1(copy(phi_i*phi_k_bra))
-	//								.particle2(copy(phi_j));
-	//						f_ijk.fill_tree(op_mod).truncate();
-	//						real_function_6d x=op(f_ijk).truncate();
-	//			            result+=multiply(copy(x),copy(phi_k_ket),1).truncate();
-	//					}
-	//
-	//					if (i==j) {
-	//						result+=swap_particles(result);
-	//					} else {
-	//						op.particle()=2;
-	//						for (int k=0; k<hf->nocc(); ++k) {
-	//							const real_function_3d& phi_k_bra=hf->R2orbital(k);
-	//							const real_function_3d& phi_k_ket=hf->nemo(k);
-	//							real_function_6d f_ijk=CompositeFactory<double,6,3>(world)
-	//									.g12(corrfac.f())
-	//									.particle1(copy(phi_i))
-	//									.particle2(copy(phi_j*phi_k_bra));
-	//							f_ijk.fill_tree(op_mod).truncate();
-	//							real_function_6d x=op(f_ijk).truncate();
-	//				            result+=multiply(copy(x),copy(phi_k_ket),2).truncate();
-	//						}
-	//					}
-	//					Kfphi0=result;
 
 	{
 		real_function_6d tmp =
@@ -903,8 +865,10 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 	real_convolution_6d green = BSHOperator<6>(world, sqrt(-2.0 * eps), lo,
 			bsh_eps);
 
-    real_function_6d Uphi0 = make_Uphi0(pair);
-	save_function(Uphi0, "Uphi0");
+//    real_function_6d Uphi0 = make_Uphi0(pair);
+//	save_function(Uphi0, "Uphi0");
+	real_function_6d Uphi0;
+	load_function(Uphi0,"Uphi0");
 
     real_function_6d KffKphi0 = make_KffKphi0(pair);
 
@@ -1183,13 +1147,14 @@ real_function_6d MP2::K(const real_function_6d& phi,
 	real_function_6d result = real_factory_6d(world);
 	// loop over all orbitals of the reference
 	for (int i = 0; i < hf->nocc(); ++i) {
-		real_function_6d tmp = apply_exchange(phi, hf->nemo(i),
-				hf->R2orbitals()[i], 1);
+		real_function_6d tmp;
+		tmp= apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 1);
+//		save_function(tmp,"tmp");
+//		load_function(tmp,"tmp");
 		if (is_symmetric) {
 			tmp = tmp + swap_particles(tmp);
 		} else {
-			tmp = tmp
-					+ apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 2);
+			tmp = tmp + apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 2);
 		}
 		result = (result + tmp).truncate();
 	}
@@ -1222,6 +1187,7 @@ real_function_6d MP2::apply_exchange(const real_function_6d& f,
 			hf->get_calc().param.econv());
 	op.particle() = particle;
 	op.destructive()=true;
+f.print_size("f in apply_exchange");
 
 	//            if (world.rank()==0) printf("start multiplication before K at time %.1f\n",wall_time());
 
@@ -1232,11 +1198,13 @@ real_function_6d MP2::apply_exchange(const real_function_6d& f,
 	//            x.fill_tree().truncate();
 	real_function_6d x =
 			multiply(copy(f), copy(orbital_bra), particle).truncate();
+x.print_size("x in apply_exchange");
 
 	// apply the Poisson operator
 	//            if (world.rank()==0) printf("start exchange at time %.1f\n",wall_time());
 	load_balance(x, false);
 	x = op(x).truncate();
+	x.print_size("Gx");
 
 	// do the final multiplication with the orbital
 	//            if (world.rank()==0) printf("start multiplication after K at time %.1f\n",wall_time());
@@ -1246,6 +1214,7 @@ real_function_6d MP2::apply_exchange(const real_function_6d& f,
 	//            result.fill_tree().truncate().reduce_rank();
 	real_function_6d result =
 			multiply(copy(x), copy(orbital_ket), particle).truncate();
+result.print_size("result");
 
 	//            if (world.rank()==0) printf("end multiplication after K at time %.1f\n",wall_time());
 	return result;

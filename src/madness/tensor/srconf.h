@@ -44,6 +44,7 @@
 #include <madness/tensor/clapack.h>
 #include <madness/tensor/tensor_lapack.h>
 #include <list>
+#include<array>
 
 using namespace madness;
 namespace madness {
@@ -135,29 +136,26 @@ namespace madness {
 				const long nci) : SRConf(ndim,dimensions.data(),nci) {
 		}
 
-		/// ctor with dimensions for a vector configuration (tested)
-
-		/// @param[in]	nci0 	number of collapsed indices for the left vectors
-		SRConf(const long& ndim, const long& k, const long nci) {
-
-			std::array<long,TENSOR_MAXDIM> dimensions;
-			dimensions.fill(k);
-    		BaseTensor::set_dims_and_size(ndim,dimensions.data());
-			if (nci_left<0) nci_left=ndim/2;	// integer division
-			make_structure();
-
-		}
+//		/// ctor with dimensions for a vector configuration (tested)
+//
+//		/// @param[in]	nci0 	number of collapsed indices for the left vectors
+//		SRConf(const long& ndim, const long& k, const long nci) {
+//
+//			std::array<long,TENSOR_MAXDIM> dimensions;
+//			dimensions.fill(k);
+//    		BaseTensor::set_dims_and_size(ndim,dimensions.data());
+//			if (nci_left<0) nci_left=ndim/2;	// integer division
+//			make_structure();
+//
+//		}
 
 		/// copy ctor (tested); shallow copy
-		SRConf(const SRConf& rhs)  {
-			*this=rhs;
-            MADNESS_ASSERT(has_structure());
-		}
+		SRConf(const SRConf& rhs) = default;
 
 		/// ctor with provided weights and effective vectors; shallow copy
 		SRConf(const Tensor<double>& weights, const std::vector<Tensor<T> >& vectors,
-				const unsigned int& ndim, const unsigned int k, const long nci=-1)
-			: SRConf(ndim,k,nci) {
+				const long& ndim, const long& dims, const long nci)
+			: SRConf(ndim,dims,nci) {
 			MADNESS_ASSERT(vectors.size()==2);
 			set_vectors_and_weights(weights,vectors[0],vectors[1]);
 			make_structure();
@@ -167,8 +165,8 @@ namespace madness {
 
 		/// explicit ctor with two vectors (aka SVD), shallow
 		SRConf(const Tensor<double>& weights, const tensorT& vector1, const tensorT& vector2,
-				const unsigned int& dim, const unsigned int maxk, const long nci=-1)
-			: SRConf(dim,maxk,nci) {
+				const long& ndim, const long* dims, const long nci)
+			: SRConf(ndim,dims,nci) {
 			set_vectors_and_weights(weights,vector1,vector2);
 			make_structure();
 			MADNESS_ASSERT(check_dimensions());
@@ -179,6 +177,10 @@ namespace madness {
 
 			// check for self-assignment
 			if (&rhs==this) return *this;
+			if (rhs.has_no_data()) {
+				clear();
+				return *this;
+			}
 
 			// these always hold
 			nci_left=rhs.nci_left;
@@ -186,7 +188,7 @@ namespace madness {
 			s0=rhs.s0;
 			s1=rhs.s1;
 
-			if (rhs.has_no_data()) {
+			if (rhs.rank()==0) {
 				// construct empty vector
 				make_empty_vectors_and_weights(0);
 				make_structure();
@@ -251,6 +253,14 @@ namespace madness {
     		make_structure();
     	}
 
+    	void clear() {
+    		weights_.clear();
+    		vector_[0].clear();
+    		vector_[1].clear();
+            _size = 0;
+            _ndim = -1;
+    	}
+
 		/// return some of the terms of the SRConf (start,..,end), inclusively
 		/// shallow copy
 		const SRConf get_configs(const int& start, const int& end) const {
@@ -283,7 +293,7 @@ namespace madness {
 
 		/// does this have any data?
 		bool has_data() const {
-			return rank()>0;
+			return (size()!=0);
 		}
 
 	private:
@@ -303,7 +313,7 @@ namespace madness {
 		/// reduce the rank using a divide-and-conquer approach
 		void divide_and_conquer_reduce(const double& thresh) {
 
-			if (has_no_data()) return;
+			if (has_no_data() or rank()==0) return;
 			if (rank()==1) {
 				normalize();
 				return;
@@ -333,7 +343,7 @@ namespace madness {
 		/// orthonormalize this
 		void orthonormalize(const double& thresh) {
 
-			if (has_no_data()) return;
+			if (has_no_data() or rank()==0) return;
 			if (rank()==1) {
 				normalize();
 				return;
@@ -384,8 +394,8 @@ namespace madness {
 		void append(const SRConf<T>& rhs, const double fac=1.0) {
 
 			// fast return if possible
-			if (rhs.has_no_data()) return;
-			if (this->has_no_data()) {
+			if (rhs.has_no_data() or rhs.rank()==0) return;
+			if (this->has_no_data() or rank()==0) {
 				*this=copy(rhs);
 				this->scale(fac);
 				return;
@@ -423,13 +433,14 @@ namespace madness {
 			MADNESS_EXCEPTION("no complex in SRConf",1);
 		}
 
+	public:
 		/// add two orthonormal configurations, yielding an optimal SVD decomposition
 		void add_SVD(const SRConf<T>& rhs, const double& thresh) {
 #ifdef BENCH
 			double cpu0=wall_time();
 #endif
-			if (rhs.has_no_data()) return;
-			if (has_no_data()) {
+			if (rhs.has_no_data() or rhs.rank()==0) return;
+			if (has_no_data() or rank()==0) {
 				*this=rhs;
 				return;
 			}
@@ -458,21 +469,47 @@ namespace madness {
 
 		/// bounds checking should have been performed by caller
 		/// s denotes where in lhs the new contribution from rhs will be inserted
-		void inplace_add(const SRConf<T>& rhs2, std::vector<Slice> lhs_s,
-				std::vector<Slice> rhs_s, const double alpha, const double beta) {
+		void inplace_add(const SRConf<T>& rhs, std::array<Slice,TENSOR_MAXDIM> lhs_s,
+				std::array<Slice,TENSOR_MAXDIM> rhs_s, const double alpha, const double beta) {
 
 			// cannot scale a slice only...
 			MADNESS_ASSERT(alpha==1.0);
 
 			// fast return if possible; no fast return for this.rank()==0
 			// since we might work with slices!
-			if (rhs2.has_no_data()) return;
+			if (rhs.has_no_data() or rhs.rank()==0) return;
 
-			SRConf<T> sr1=rhs2.copy_slice(rhs_s);
-			sr1.scale(alpha);
-			SRConf<T> sr2=this->copy_slice(lhs_s);
-			sr1.append(sr2,beta);
-			*this=sr1;
+			// prepare the vectors
+			SRConf<T> result(ndim(),dims(),nci_left);
+			result.make_empty_vectors_and_weights(rank()+rhs.rank());
+
+			// insert lhs into result
+			if (rank()>0) {
+				result.vector_[0](s0)=vector_[0];
+				result.vector_[1](s1)=vector_[1];
+				result.weights_(Slice(0,rank()-1))=weights_;
+			}
+			// insert rhs into result
+			{
+	            auto [sr0,sr1]=rhs.make_slices(rhs_s);
+	            auto [sl0,sl1]=make_slices(lhs_s);
+	            sl0[0]=Slice(rank(),result.rank()-1);
+	            sl1[0]=Slice(rank(),result.rank()-1);
+	            result.vector_[0](sl0)=rhs.vector_[0](sr0);
+	            result.vector_[1](sl1)=rhs.vector_[1](sr1);
+	            result.weights_(Slice(rank(),result.rank()-1))=rhs.weights_*beta;
+
+			}
+			std::swap(*this,result);
+
+//			sr2.insert_slice(lhs_s,sr1);
+
+//            Tensor<T> vector0=copy(vector_[0](s00));
+//            Tensor<T> vector1=copy(vector_[1](s11));
+//
+//            Tensor<double> weights=copy(this->weights_(Slice(0,rank()-1)));
+//            result.set_vectors_and_weights(weights,vector0,vector1);
+//			this->append(sr2,beta);
 
             MADNESS_ASSERT(has_structure());
 		}
@@ -480,10 +517,12 @@ namespace madness {
 		/// deep copy of rhs, shrink
 		friend SRConf<T> copy(const SRConf<T>& rhs) {
 
+			if (rhs.has_no_data()) return SRConf<T>();
+
 			SRConf<T> result(rhs.ndim(),rhs.dims(),rhs.nci_left);
 
 			// if rhs is non-existent simply construct a new SRConf
-			if (rhs.has_data()) {
+			if (rhs.has_data() and rhs.rank()>0) {
 				result.set_vectors_and_weights(copy(rhs.weights_(Slice(0,rhs.rank()-1))),
 						copy(rhs.vector_[0](rhs.c0(0))),copy(rhs.vector_[1](rhs.c0(1))));
 			}
@@ -493,14 +532,17 @@ namespace madness {
 
 public:
         /// return a slice of this (deep copy)
-        SRConf<T> copy_slice(const std::vector<Slice>& s) const {
+        SRConf<T> copy_slice(const std::array<Slice,TENSOR_MAXDIM>& s) const {
 
         	std::array<long,TENSOR_MAXDIM> k;
-        	for (int i=0; i<s.size(); ++i) k[i]= s[0].end-s[0].start+1;
+        	for (int i=0; i<s.size(); ++i) {
+        		if (s[i].end==-1) k[i]=dim(i);
+        		else k[i]= s[i].end-s[i].start+1;
+        	}
             SRConf<T> result(ndim(),k,nci_left);
 
             // fast return if possible
-            if (this->has_no_data()) return result;
+            if (this->has_no_data() or rank()==0) return result;
 
             auto [s00,s11]=make_slices(s);
             Tensor<T> vector0=copy(vector_[0](s00));
@@ -515,37 +557,27 @@ public:
         /// perform elementwise Hadamard product
         SRConf<T>& emul(const SRConf<T>& other) {
             // consistency check
-            MADNESS_ASSERT(conforms(this,&other));
+            MADNESS_ASSERT(compatible(*this,other));
 
             long finalrank=this->rank()*other.rank();
 
-            SRConf<T> result(ndim(),dims());	// empty tensor
+            SRConf<T> result(ndim(),dims(),nci_left);	// empty tensor
 
             if ((this->rank()==0) or (other.rank()==0)) {
                 ;   // pass
             } else {
 
-            	auto dimensions=make_vector_dimensions(finalrank);
-                result.vector_[0]=Tensor<T>(dimensions[0]);
-                result.vector_[1]=Tensor<T>(dimensions[1]);
+            	result.make_empty_vectors_and_weights(finalrank);
                 result.weights_=outer(weights_,other.weights_).flat();
-                result.rank_=finalrank;
 
                 // left vector
-                Tensor<T> a1=flat_vector(0);
-                Tensor<T> b1=other.flat_vector(0);
-
-                for (int k=0; k<a1.dim(1); ++k) {
-                	Slice kslice=Slice(k,k);
-                    result.vector_[0](_,kslice)=outer(a1(_,kslice),b1(_,kslice)).reshape(finalrank,1);
-                }
-
-                // right vector
-                Tensor<T> a2=flat_vector(1);
-                Tensor<T> b2=other.flat_vector(1);
-                for (int k=0; k<a2.dim(1); ++k) {
-                	Slice kslice=Slice(k,k);
-                    result.vector_[1](_,kslice)=outer(a2(_,kslice),b2(_,kslice)).reshape(finalrank,1);
+                for (int i=0; i<2; ++i) {
+                    Tensor<T> a1=flat_vector(i);
+                    Tensor<T> b1=other.flat_vector(i);
+                	Tensor<T> r1=result.vector_[i].reshape(finalrank,kVec(i));
+                    for (int k=0; k<a1.dim(1); ++k) {
+                    	r1(_,Slice(k,k))=outer(a1(_,k),b1(_,k)).reshape(finalrank,1);
+                    }
                 }
             }
             result.make_structure();
@@ -565,8 +597,7 @@ protected:
 			s1[0]=Slice(0,rank()-1);
 		}
 
-		/// redo the Slices for getting direct access to the configurations
-		std::array<std::vector<Slice>,2> make_slices(const std::vector<Slice>& s) const {
+		std::array<std::vector<Slice>,2> make_slices(const std::array<Slice,TENSOR_MAXDIM>& s) const {
 			std::vector<Slice> s00(nci_left+1,_);				// first dim is the rank
 			std::vector<Slice> s10(ndim()-nci_left+1,_);				// first dim is the rank
 
@@ -584,10 +615,7 @@ protected:
 
 		void make_structure(bool force=false) {
 
-			long rr=weights_.dim(0);	// not the rank!
-			if (weights_.size()==0) rr=0;
-
-			auto dimensions=make_vector_dimensions(rr);
+			auto dimensions=make_vector_dimensions(rank());
 			vector_[0]=vector_[0].reshape(nci_left+1,&dimensions[0][0]);
 			vector_[1]=vector_[1].reshape(ndim()-nci_left+1,&dimensions[1][0]);
 
@@ -783,6 +811,7 @@ protected:
 
 			// fast return if either rank is 0
 			if ((lhs.has_no_data()) or (rhs.has_no_data())) return 0.0;
+			if ((lhs.rank()==0) or (rhs.rank()==0)) return 0.0;
 
 			/*
 			 * the structure of an SRConf is (r,k) or (r,k',k), with
@@ -820,7 +849,7 @@ protected:
 
 		/// calculate the Frobenius norm, if this is in SVD form
         typename TensorTypeData<T>::float_scalar_type svd_normf() const {
-            if (has_no_data()) return 0.0;
+            if (has_no_data() or rank()==0) return 0.0;
             return weights_(Slice(0,rank()-1)).normf();
         }
 
@@ -828,7 +857,7 @@ protected:
 		typename TensorTypeData<T>::float_scalar_type normf() const {
 
 			// fast return if possible
-			if (has_no_data()) return 0.0;
+			if (has_no_data() or rank()==0) return 0.0;
 
 			// some checks
 			MADNESS_ASSERT(ndim()>0);
@@ -862,7 +891,7 @@ protected:
 
 		/// check compatibility
 		friend bool compatible(const SRConf& lhs, const SRConf& rhs) {
-			return (lhs.conforms(*rhs) and (lhs.dim_per_vector()==rhs.dim_per_vector()));
+			return (lhs.conforms(&rhs) and (lhs.dim_per_vector(0)==rhs.dim_per_vector(0)));
 		}
 
 	    /// \code
@@ -873,7 +902,7 @@ protected:
 		SRConf<T> transform(const Tensor<T>& c) const {
 
 			// fast return if possible
-			if (this->has_no_data()) SRConf<T>(ndim(),dims(),nci_left);
+			if (this->has_no_data() or rank()==0) SRConf<T>(ndim(),dims(),nci_left);
 
 			// copying shrinks the vectors to (r,k,k,..)
 			SRConf<T> result=copy(*this);
@@ -905,7 +934,7 @@ public:
 		SRConf<TENSOR_RESULT_TYPE(T,Q) > general_transform(const Tensor<Q> c[]) const {
 
 			// fast return if possible
-			if (this->has_no_data()) SRConf<T>(ndim(),dims(),nci_left);
+			if (this->has_no_data() or rank()==0) SRConf<T>(ndim(),dims(),nci_left);
 
 			// copying shrinks the vectors to (r,k,k,..)
 			SRConf<T> result=copy(*this);
@@ -934,7 +963,7 @@ public:
 
 		SRConf<T> transform_dir(const Tensor<T>& c, const int& axis) const {
 
-			if (this->has_no_data()) SRConf<T>(ndim(),dims(),nci_left);
+			if (this->has_no_data() or rank()==0) SRConf<T>(ndim(),dims(),nci_left);
 
 			// copying shrinks the vectors to (r,k,k,..)
 			SRConf<T> result=copy(*this);
@@ -947,7 +976,6 @@ public:
 
 			// compute idim for accessing the vector_, and the dimension inside vector_
 			// the +1 on jdim for the rank
-			MADNESS_EXCEPTION("fix me",1);
 			const long idim=axis/this->dim_per_vector(0);
 			const long jdim=axis%this->dim_per_vector(0)+1;
 

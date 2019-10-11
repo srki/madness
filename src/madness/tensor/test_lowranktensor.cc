@@ -130,6 +130,19 @@ int test_addition(const TensorType& tt) {
 	print("error4",error4);
 	error+=error4;
 
+	if (tt==TT_2D) {
+		tensor4+=tensor2;
+		lrt4.reduce_rank(1.e-4);
+		lrt2.reduce_rank(1.e-4);
+		lrt4.get_svdtensor().add_SVD(lrt2.get_svdtensor(),1.e-4);
+		double error5=compute_difference(lrt4,tensor4);
+		print("error5",error5);
+		error+=error5;
+
+
+	}
+
+
 	return (error>1.e-8);
 }
 
@@ -199,6 +212,33 @@ int test_reduce_rank(const TensorType& tt) {
 	return (error>1.e-8);
 }
 
+
+
+template<typename T>
+int test_emul(const TensorType& tt) {
+
+	print("\nentering test_emul", tt);
+	std::vector<long> dim=make_dimensions();
+	Tensor<T> tensor1(dim);
+	Tensor<T> tensor2(dim);
+	tensor1.fillrandom();
+	tensor2.fillrandom();
+	double error=0.0;
+	double thresh=1.e-5;
+
+	LowRankTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
+	LowRankTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
+
+	tensor1.emul(tensor2);
+	lrt1.emul(lrt2);
+
+	double error2=compute_difference(lrt1,tensor1);
+	print("error2",error2);
+	error+=error2;
+
+
+	return (error>1.e-8);
+}
 
 template<typename T>
 int test_convert() {
@@ -270,8 +310,8 @@ main(int argc, char* argv[]) {
     int success = test_constructor<double>();
     success += test_constructor<double_complex>();
 
-    success +=  test_reconstruct<double>();
-    success +=  test_reconstruct<double_complex>();
+//    success +=  test_reconstruct<double>();
+//    success +=  test_reconstruct<double_complex>();
 
     success +=  test_convert<double>();
     success +=  test_convert<double_complex>();
@@ -281,6 +321,7 @@ main(int argc, char* argv[]) {
     	success += test_addition<double>(t);
     	success += test_sliced_addition<double>(t);
     	success += test_reduce_rank<double>(t);
+    	success += test_emul<double>(t);
     }
 
     success += test_general_transform<double>();

@@ -44,21 +44,20 @@ public:
     SVDTensor() : SRConf<T>() {}
 
     SVDTensor(const Tensor<T>& rhs, const double eps) {
-    	*this=computeSVD(rhs,eps);
+    	if (rhs.has_data()) *this=computeSVD(rhs,eps);
     }
 
-    SVDTensor(const SVDTensor<T>& rhs) : SRConf<T>(rhs) {    }
+    SVDTensor(const SVDTensor<T>& rhs) = default;
 
-    SVDTensor(const SRConf<T>& rhs) : SRConf<T>(SRConf<T>(rhs)) {    }
+    SVDTensor(const SRConf<T>& rhs) : SRConf<T>(rhs) {    }
 
     SVDTensor(const std::vector<long>& dims) : SRConf<T>(dims.size(),dims.data(),dims.size()/2) {    }
 
     SVDTensor(const long ndims, const long* dims) : SRConf<T>(ndims,dims,ndims/2) {    }
 
     SVDTensor(const Tensor<double>& weights, const Tensor<T>& vector1,
-            const Tensor<T>& vector2, const unsigned int& dim,
-            const unsigned int maxk) : SRConf<T>(weights,
-                    vector1, vector2, dim, maxk ) {}
+            const Tensor<T>& vector2, const long& ndim,
+            const long* dims) : SRConf<T>(weights, vector1, vector2, ndim, dims, ndim/2) {}
 
     SVDTensor& operator=(const T& number) {
         SRConf<T>& base=*this;
@@ -112,7 +111,8 @@ public:
 	}
 
     SVDTensor<T>& emul(const SVDTensor<T>& other) {
-    	this->emul(other);
+        const SRConf<T>& base=other;
+    	SRConf<T>::emul(base);
     	return *this;
     }
 

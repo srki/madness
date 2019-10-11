@@ -162,7 +162,9 @@ namespace madness {
 		TensorTrain(const Tensor<T>& t, double eps)
 			: core(), zero_rank(false) {
 			BaseTensor::set_dims_and_size(t.ndim(),t.dims());
-		    MADNESS_ASSERT(t.size() != 0);
+			if (t.size()==0) return;
+
+			MADNESS_ASSERT(t.size() != 0);
             MADNESS_ASSERT(t.ndim() != 0);
 
             std::vector<long> dims(t.ndim());
@@ -225,7 +227,7 @@ namespace madness {
             std::vector<long> d(c.size());
             d[0]=core[0].dim(0);    // dim,rank
             for (long i=1; i<d.size(); ++i) d[i]=core[i].dim(1);  // rank,dim,rank
-			set_size_and_dim(d.size(),d.data());
+			set_size_and_dim(d);
 
             // check for zero ranks
             for (int d=1; d<core.size(); ++d) if (core[d].dim(0)==0) zero_me();
@@ -303,9 +305,8 @@ namespace madness {
 		/// tensor is most likely not in an optimal compression state
 		/// @param[in]  other   tensor to be sliced
 		/// @param[in]  s       vector of slices
-		friend TensorTrain copy(const TensorTrain& other, const std::vector<Slice>& s) {
+		friend TensorTrain copy(const TensorTrain& other, const std::array<Slice,TENSOR_MAXDIM>& s) {
 
-		    MADNESS_ASSERT(other.ndim()==s.size());
 		    if (other.zero_rank) {
 		        std::vector<long> dims(s.size());
 		        for (int i=0; i<dims.size(); ++i) dims[i]=s[i].end-s[i].start+1;
@@ -581,12 +582,13 @@ namespace madness {
         /// Inplace generalized saxpy with slices and without alpha
 
         /// return this = this(s1) + other(s2) * beta
-        TensorTrain<T>& gaxpy(const std::vector<Slice>& s1,
-                const TensorTrain<T>& rhs, T beta, const std::vector<Slice>& s2) {
+        TensorTrain<T>& gaxpy(const std::array<Slice,TENSOR_MAXDIM>& s1,
+                const TensorTrain<T>& rhs, T beta, const std::array<Slice,TENSOR_MAXDIM>& s2) {
 
             // make sure dimensions conform
             MADNESS_ASSERT(this->ndim()==rhs.ndim());
 
+            if (rhs.zero_rank or (beta==0.0)) return *this;
 //            if (this->zero_rank) {
 //                *this=rhs*beta;
 
@@ -658,6 +660,7 @@ namespace madness {
                     MADNESS_EXCEPTION("emul in TensorTrain too large -- use full rank tenspr",1);
             }
             TensorTrain result(ndim(),dims());
+            result.core.resize(ndim());
 
             // fast return for zero ranks
             if (zero_rank or other.zero_rank) {
@@ -719,6 +722,7 @@ namespace madness {
 			// core_new = left * right
 			// (r1, k1*k2, r3) = sum_r2 (r1, k1, r2) * (r2, k2, r3)
 
+			fusedim_inplace(i);
 			// determine index
 			const int index=core[i].ndim()-2;	// (r-1, k, k, .. , k, r1)
 
@@ -763,7 +767,8 @@ namespace madness {
                 return TensorTrain(newdims);
             }
 
-            TensorTrain<T> result;
+            TensorTrain<T> result(ndim(),dims());
+            result.splitdim_inplace(idim,k1,k2);
 
             long r1= (idim==0) ? 1 : ranks(idim-1);       // left-side rank
             long r2= (idim==ndim()-1) ? 1 : ranks(idim);  // right-side rank
@@ -820,10 +825,8 @@ namespace madness {
 					for (int i=1; i<this->ndim(); ++i) size*=core[i].dim(1);
 					return Tensor<T>(size);
 				} else {
-					std::vector<long> d(this->ndim());
-					d[0]=core[0].dim(0);	// first core tensor has shape (k,r1)
-					for (int i=1; i<this->ndim(); ++i) d[i]=core[i].dim(1);
-					return Tensor<T>(d);
+					MADNESS_ASSERT(_size>0);
+					return Tensor<T>(ndim(),dims());
 				}
 			}
 
@@ -1535,7 +1538,7 @@ public:
 
         // SVD on first core, skip small singular values
         long R=rank_revealing_decompose(AC,B[0],thresh,s,scr1);
-        if (R==0) return TensorTrain<resultT>(t.dims());    // fast return for zero ranks
+        if (R==0) return TensorTrain<resultT>(t.ndim(),t.dims());    // fast return for zero ranks
         B[0]=B[0].reshape(k0,R);
 
         // AC has dimensions R1,(q1,r1)
@@ -1587,7 +1590,7 @@ public:
 
             AVC=AVC.reshape(R1*k,q2*r2);
             long R2=rank_revealing_decompose(AVC,B[d],thresh,s,scr1);
-            if (R2==0) return TensorTrain<resultT>(t.dims());    // fast return for zero ranks
+            if (R2==0) return TensorTrain<resultT>(t.ndim(),t.dims());    // fast return for zero ranks
             B[d]=B[d].reshape(R1,k,R2);
             VT=AVC.reshape(R2,q2,r2);
         }
