@@ -136,27 +136,32 @@ void draw_circle(World& world, Function<double,NDIM>& pair, const std::string re
 
 
 void dostuff(World& world) {
-    FunctionDefaults<6>::set_tensor_type(TT_2D);
 
+	Tensor<double> r(5,5);
+	r.fillrandom();
+
+	Tensor<double> rr=r;
+	r+=1.0;
+
+	print("r.normf()",r.normf());
+	print("rr.normf()",rr.normf());
+
+	Tensor<double> rrr=r;
+	r=r+1.0;
+
+	print("r.normf()",r.normf());
+	print("rrr.normf()",rrr.normf());
+
+	double thresh=1.e-3;
 	real_function_6d Uphi0=real_factory_6d(world);
-	load_function(world,Uphi0,"Uphi0");
-//	Uphi0.get_impl()->targs=TensorArgs(TensorArgs(FunctionDefaults<6>::get_thresh()*
-//			GenTensor<double>::fac_reduce(),TT_2D));
-	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
-	print("FunctionDefaults<6>::get_thresh()",FunctionDefaults<6>::get_thresh());
-	Uphi0.change_tensor_type(TensorArgs(FunctionDefaults<6>::get_thresh(),TT_2D));
-	print("tensor args",Uphi0.get_impl()->get_tensor_args().tt);
-	Uphi0.get_impl()->print_stats();
-	double w0=wall_time();
-	if (world.rank() == 0) printf("starting compression at time %6.1fs\n",w0);
-	Uphi0.compress();
-	double w1=wall_time();
-	if (world.rank() == 0) printf("ending compression at time %6.1fs\n",w1);
-	if (world.rank() == 0) printf("compression took %6.1fs\n\n",w1-2);
+	load_function(world,Uphi0,"result_before_reconstruction");
+//    FunctionDefaults<6>::set_tensor_type(TT_FULL);
+//    Uphi0.change_tensor_type(TensorArgs(thresh,TT_FULL));
 
-	Uphi0.get_impl()->print_stats();
-	tensortxt op;
-	Uphi0.unaryop_coeff(op);
+	Uphi0.print_size("result before reconstruction");
+	Uphi0.reconstruct();
+	Uphi0.print_size("result after reconstruction");
+	throw;
 
 }
 

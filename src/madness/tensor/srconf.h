@@ -285,7 +285,7 @@ namespace madness {
 
         template <typename Archive>
         void serialize(Archive& ar) {
-              	ar & weights_ & vector_ & nci_left & _ndim & _size
+              	ar & weights_ & vector_[0] & vector_[1] & nci_left & _ndim & _size
 					& _id &  archive::wrap(_dim,TENSOR_MAXDIM);
               	make_slices();
                 MADNESS_ASSERT(has_structure());
@@ -501,16 +501,6 @@ namespace madness {
 
 			}
 			std::swap(*this,result);
-
-//			sr2.insert_slice(lhs_s,sr1);
-
-//            Tensor<T> vector0=copy(vector_[0](s00));
-//            Tensor<T> vector1=copy(vector_[1](s11));
-//
-//            Tensor<double> weights=copy(this->weights_(Slice(0,rank()-1)));
-//            result.set_vectors_and_weights(weights,vector0,vector1);
-//			this->append(sr2,beta);
-
             MADNESS_ASSERT(has_structure());
 		}
 

@@ -2039,8 +2039,11 @@ namespace madness {
 
         if (node.has_children() || node.has_coeff()) { // Must allow for inconsistent state from transform, etc.
             coeffT d = node.coeff();
+
             if (!d.has_data()) d = coeffT(cdata.v2k,targs);
-            if (key.level() > 0) d(cdata.s0) += s; // -- note accumulate for NS summation
+            if (key.level() > 0) {
+            	d(cdata.s0) += s; // -- note accumulate for NS summation
+            }
             if (d.dim(0)==2*get_k()) {              // d might be pre-truncated if it's a leaf
                 d = unfilter(d);
                 node.clear_coeff();
@@ -2055,7 +2058,8 @@ namespace madness {
             } else {
                 MADNESS_ASSERT(node.is_leaf());
                 //                node.coeff()+=s;
-                node.coeff().reduce_rank(targs.thresh);
+                node.set_coeff(copy(d));
+//                node.coeff().reduce_rank(targs.thresh);
             }
         }
         else {

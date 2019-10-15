@@ -791,9 +791,7 @@ real_function_6d MP2::make_KffKphi0(const ElectronPair& pair) const {
 						copy(hf->R2orbitals()[i])).particle2(
 								copy(hf->R2orbitals()[j]));
 		double a1 = inner(Kfphi0, tmp);
-		if (world.rank() == 0)
-			printf("< nemo0 | R^2 R-1 K f R | nemo0 >  %12.8f\n", a1);
-		//					save_function(Kfphi0,"Kfphi0");
+		if (world.rank() == 0) printf("< nemo0 | R^2 R-1 K f R | nemo0 >  %12.8f\n", a1);
 	}
 	const real_function_6d fKphi0 = make_fKphi0(pair.i, pair.j);
 	{
@@ -865,10 +863,10 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 	real_convolution_6d green = BSHOperator<6>(world, sqrt(-2.0 * eps), lo,
 			bsh_eps);
 
-//    real_function_6d Uphi0 = make_Uphi0(pair);
-//	save_function(Uphi0, "Uphi0");
-	real_function_6d Uphi0;
-	load_function(Uphi0,"Uphi0");
+    real_function_6d Uphi0 = make_Uphi0(pair);
+	save_function(Uphi0, "Uphi0");
+//	real_function_6d Uphi0;
+//	load_function(Uphi0,"Uphi0");
 
     real_function_6d KffKphi0 = make_KffKphi0(pair);
 

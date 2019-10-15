@@ -27,6 +27,9 @@ int testGenTensor_ctor(const long& k, const long& dim, const double& eps, const 
 	std::vector<long> d(dim,k);
 	std::vector<Tensor<double> > t(3);
 
+	GenTensor<double> gg;
+	MADNESS_ASSERT(gg.has_no_data());
+
 	t[0]=Tensor<double>(d);
 	t[1]=Tensor<double>(d).fillindex();
 	t[2]=Tensor<double>(d).fillrandom();
@@ -278,6 +281,7 @@ int testGenTensor_algebra(const long& k, const long& dim, const double& eps, con
     t[2].scale(1./t2norm)*137.72;
 
 	std::vector<Slice> s(dim,Slice(0,1));
+	std::vector<Slice> s1(dim,Slice(1,2));
 
 //	Tensor<double> t2=copy(t0(s));
 
@@ -322,6 +326,61 @@ int testGenTensor_algebra(const long& k, const long& dim, const double& eps, con
 	}
 
 
+	// test inplace add: g0-=g1(s)
+	for (int i=0; i<3; i++) {
+		for (int j=0; j<3; j++) {
+
+			Tensor<double> t0=copy(t[i](s));
+			Tensor<double> t1=copy(t[j]);
+
+			GenTensor<double> g0(t0,eps,tt);
+			GenTensor<double> g1(t1,eps,tt);
+
+			g0-=g1(s);
+			t0-=t1(s);
+			norm=(g0.full_tensor_copy()-t0).normf();
+			print(ok(is_small(norm,eps)),"algebra g0-=g1(s)   ",g0.what_am_i(),norm);
+			if (!is_small(norm,eps)) nerror++;
+		}
+	}
+
+
+	// test inplace add: g0(s)+=g1
+	for (int i=0; i<3; i++) {
+		for (int j=0; j<3; j++) {
+
+			Tensor<double> t0=copy(t[i]);
+			Tensor<double> t1=copy(t[j](s));
+
+			GenTensor<double> g0(t0,eps,tt);
+			GenTensor<double> g1(t1,eps,tt);
+
+			g0(s1)+=g1;
+			t0(s1)+=t1;
+			norm=(g0.full_tensor_copy()-t0).normf();
+			print(ok(is_small(norm,eps)),"algebra g0(s)+=g1   ",g0.what_am_i(),norm);
+			if (!is_small(norm,eps)) nerror++;
+		}
+	}
+
+	// test inplace add: g0(s)-=g1
+	for (int i=0; i<3; i++) {
+		for (int j=0; j<3; j++) {
+
+			Tensor<double> t0=copy(t[i]);
+			Tensor<double> t1=copy(t[j](s));
+
+			GenTensor<double> g0(t0,eps,tt);
+			GenTensor<double> g1(t1,eps,tt);
+
+			g0(s)-=g1;
+			t0(s)-=t1;
+			norm=(g0.full_tensor_copy()-t0).normf();
+			print(ok(is_small(norm,eps)),"algebra g0(s)-=g1   ",g0.what_am_i(),norm);
+			if (!is_small(norm,eps)) nerror++;
+		}
+	}
+
 	// test inplace add: g0(s)+=g1(s)
 	for (int i=0; i<3; i++) {
 		for (int j=0; j<3; j++) {
@@ -332,8 +391,8 @@ int testGenTensor_algebra(const long& k, const long& dim, const double& eps, con
 			GenTensor<double> g0(t0,eps,tt);
 			GenTensor<double> g1(t1,eps,tt);
 
-			g0(s)+=g1(s);
-			t0(s)+=t1(s);
+			g0(s)+=g1(s1);
+			t0(s)+=t1(s1);
 			norm=(g0.full_tensor_copy()-t0).normf();
 			print(ok(is_small(norm,eps)),"algebra g0(s)+=g1(s)",g0.what_am_i(),norm,g0.rank());
 			if (!is_small(norm,eps)) nerror++;
@@ -351,8 +410,8 @@ int testGenTensor_algebra(const long& k, const long& dim, const double& eps, con
 			GenTensor<double> g0(t0,eps,tt);
 			GenTensor<double> g1(t1,eps,tt);
 
-			g0(s)-=g1(s);
-			t0(s)-=t1(s);
+			g0(s1)-=g1(s);
+			t0(s1)-=t1(s);
 			norm=(g0.full_tensor_copy()-t0).normf();
 			print(ok(is_small(norm,eps)),"algebra g0(s)-=g1(s)",g0.what_am_i(),norm,g0.rank());
 			if (!is_small(norm,eps)) nerror++;
@@ -626,7 +685,7 @@ int testGenTensor_deepcopy(const long& k, const long& dim, const double& eps, co
 	t[1]=Tensor<double>(d).fillindex();
 	t[2]=Tensor<double>(d).fillrandom();
 
-	std::vector<Slice> s0(dim,Slice(0,k-2));
+	std::vector<Slice> s0(dim,Slice(1,k-2));
 
 	double norm=0.0;
 	int nerror=0;
@@ -638,9 +697,19 @@ int testGenTensor_deepcopy(const long& k, const long& dim, const double& eps, co
 		GenTensor<double> g0(t0,eps,tt);
 		GenTensor<double> g1=copy(g0);
 		GenTensor<double> g2=copy(g0(s0));
-		norm=0.0;
-		print(ok(is_small(norm,eps)),"deep copy",g0.what_am_i(),norm);
-		if (!is_small(norm,eps)) nerror++;
+
+		double error0=(g0.full_tensor_copy()-t0).normf();
+        print(ok(is_small(error0,eps)),"deepcopy t->g",g0.what_am_i(),norm);
+        if (!is_small(error0,eps)) nerror++;
+
+		double error1=(g1.full_tensor_copy()-t0).normf();
+        print(ok(is_small(error1,eps)),"deepcopy g->g",g1.what_am_i(),norm);
+        if (!is_small(error1,eps)) nerror++;
+
+		double error2=(g2.full_tensor_copy()-t0(s0)).normf();
+        print(ok(is_small(error2,eps)),"deepcopy g(s)->g",g2.what_am_i(),norm);
+        if (!is_small(error2,eps)) nerror++;
+
 	}
 
 	print("all done\n");
@@ -809,6 +878,70 @@ int testGenTensor_convert(const long k, const long dim, const TensorArgs targs) 
     return nerror;
 }
 
+
+
+/// test conversion from one gentensor representation to another
+int testGenTensor_serialize(World& world, const long k, const long dim, const TensorArgs targs) {
+
+    print("entering testGenTensor serialize");
+    int nerror=0;
+    double eps=targs.thresh;
+
+    std::vector<long> d(dim,k);
+    Tensor<double> t0(d),t1(d),t2(d);
+
+    // set up a tensor of full rank
+    t0.fillrandom();
+
+    // set up a tensor of low rank
+    t1.fillindex();
+    t1.scale(1.0/t1.normf());
+
+    GenTensor<double> g0(t0,targs);
+    GenTensor<double> g1(t1,targs);
+    GenTensor<double> g2(t2,targs);
+
+    {
+    	const std::string name = "test.dat";
+    	madness::archive::ParallelOutputArchive oar(world, name.c_str(), 1);
+
+    	oar & t0 & t1 & t2 & g0 & g1 & g2;
+    	oar.close();
+
+    	GenTensor<double> gs0, gs1, gs2;
+    	Tensor<double> ts0, ts1, ts2;
+    	madness::archive::ParallelInputArchive iar(world, name.c_str(), 1);
+    	iar & ts0 & ts1 & ts2 & gs0 & gs1 & gs2;
+    	iar.close();
+
+        double error1=(g0-gs0).normf();
+		if (!is_small(error1,eps)) nerror++;
+        print(ok(is_small(error1,eps)),"serialize",g0.what_am_i(),error1);
+
+        double error2=(g1-gs1).normf();
+		if (!is_small(error2,eps)) nerror++;
+        print(ok(is_small(error2,eps)),"serialize",g1.what_am_i(),error2);
+
+        double error3=(g2-gs2).normf();
+		if (!is_small(error3,eps)) nerror++;
+        print(ok(is_small(error3,eps)),"serialize",g2.what_am_i(),error3);
+
+		double error4=(t0-gs0.full_tensor_copy()).normf();
+		if (!is_small(error4,eps)) nerror++;
+        print(ok(is_small(error4,eps)),"serialize",gs0.what_am_i(),error4);
+
+		double error5=(t1-gs1.full_tensor_copy()).normf();
+		if (!is_small(error5,eps)) nerror++;
+        print(ok(is_small(error5,eps)),"serialize",gs1.what_am_i(),error5);
+
+		double error6=(t2-gs2.full_tensor_copy()).normf();
+		if (!is_small(error6,eps)) nerror++;
+        print(ok(is_small(error6,eps)),"serialize",gs2.what_am_i(),error6);
+
+    }
+    return nerror;
+}
+
 /// test the tensor train representation
 int testTensorTrain(const long k, const long dim, const TensorArgs targs) {
 
@@ -970,8 +1103,8 @@ int test_TT_operator_application(const long k, const long dim, const TensorArgs 
 
 int main(int argc, char**argv) {
 
-//    initialize(argc,argv);
-//    World world(MPI::COMM_WORLD);
+	initialize(argc, argv);
+	World world(SafeMPI::COMM_WORLD);
 
     srand(time(nullptr));
     std::cout << std::scientific;
@@ -1014,6 +1147,10 @@ int main(int argc, char**argv) {
 //    error+=testGenTensor_convert(k,dim,TensorArgs(eps,TT_2D));
 //    error+=testGenTensor_convert(k,dim,TensorArgs(eps,TT_TENSORTRAIN));
 
+    error+=testGenTensor_serialize(world,k,dim,TensorArgs(eps,TT_FULL));
+    error+=testGenTensor_serialize(world,k,dim,TensorArgs(eps,TT_2D));
+    error+=testGenTensor_serialize(world,k,dim,TensorArgs(eps,TT_TENSORTRAIN));
+
     error+=testGenTensor_rankreduce(k,dim,eps,TT_FULL);
     error+=testGenTensor_rankreduce(k,dim,eps,TT_2D);
     error+=testGenTensor_rankreduce(k,dim,eps,TT_TENSORTRAIN);
@@ -1035,8 +1172,8 @@ int main(int argc, char**argv) {
     print(ok(error==0),error,"finished test suite\n");
 #endif
 
-//    world.gop.fence();
-//    finalize();
+    world.gop.fence();
+    finalize();
 
     return 0;
 }

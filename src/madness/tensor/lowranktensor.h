@@ -107,7 +107,7 @@ public:
         	}
 //        	tensor=SVDTensor<T>(rhs,targs.thresh*facReduce());
         }
-        else if (targs.tt==TT_TENSORTRAIN) tensor=TensorTrain<T>(rhs,targs.thresh);
+        else if (targs.tt==TT_TENSORTRAIN) tensor=TensorTrain<T>(rhs,targs.thresh*facReduce());
         else {
         	MADNESS_EXCEPTION("unknown tensor type in LowRankTensor constructor",1);
         }
@@ -450,6 +450,13 @@ public:
 
     LowRankTensor& operator-=(const LowRankTensor& other) {
         gaxpy(1.0,other,-1.0);
+        return *this;
+    }
+
+    LowRankTensor& operator-=(const SliceLowRankTensor<T>& other) {
+    	std::array<Slice,TENSOR_MAXDIM> s0;
+    	s0.fill(_);
+        this->gaxpy(1.0,s0,*other.lrt,-1.0,other.thisslice);
         return *this;
     }
 
