@@ -1063,8 +1063,8 @@ namespace madness {
             const coeffT& val_pot, int particle) const {
 
         MADNESS_ASSERT(particle==0 or particle==1);
-        MADNESS_ASSERT(val_pot.tensor_type()==TT_FULL);
-        MADNESS_ASSERT(val_ket.tensor_type()==TT_2D);
+        MADNESS_ASSERT(val_pot.is_full_tensor());
+        MADNESS_ASSERT(val_ket.is_svd_tensor());
 
         std::vector<long> vkhalf=std::vector<long>(NDIM/2,cdata.vk[0]);
         tensorT ones=tensorT(vkhalf);
@@ -2058,8 +2058,8 @@ namespace madness {
             } else {
                 MADNESS_ASSERT(node.is_leaf());
                 //                node.coeff()+=s;
-                node.set_coeff(copy(d));
-//                node.coeff().reduce_rank(targs.thresh);
+//                node.set_coeff(copy(d));
+                node.coeff().reduce_rank(targs.thresh);
             }
         }
         else {

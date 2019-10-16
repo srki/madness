@@ -1210,24 +1210,7 @@ namespace madness {
     template<typename T>
     void change_tensor_type(GenTensor<T>& t, const TensorArgs& targs) {
 
-        // fast return if possible
-        const TensorType current_type=t.tensor_type();
-        if (current_type==targs.tt) return;
-        if (t.has_no_data()) return;
-
-        // for now
-        MADNESS_ASSERT(targs.tt==TT_FULL or targs.tt==TT_2D);
-        MADNESS_ASSERT(current_type==TT_FULL or current_type==TT_2D);
-
-        GenTensor<T> result;
-        if (targs.tt==TT_FULL) {
-            result=GenTensor<T>(t.full_tensor_copy(),targs);
-        } else if (targs.tt==TT_2D) {
-            MADNESS_ASSERT(current_type==TT_FULL);
-            result=GenTensor<T>(t.full_tensor(),targs);
-        }
-
-        t=result;
+    	t.convert_inplace(targs);
 
     }
 
@@ -1282,7 +1265,13 @@ public:
     }
 
 
-    std::string what_am_i() const {return TensorArgs::what_am_i(this->tensor_type());};
+    std::string what_am_i() const {
+    	TensorType tt;
+    	if (this->is_full_tensor()) tt=TT_FULL;
+    	if (this->is_svd_tensor()) tt=TT_2D;
+    	if (this->is_tensortrain()) tt=TT_TENSORTRAIN;
+    	return TensorArgs::what_am_i(tt);
+    };
 
 //    SRConf<T>& config() const {
 //        MADNESS_ASSERT(this->type==TT_2D and (this->impl.svd));
@@ -1394,33 +1383,33 @@ GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_opti
 
 
 
-//namespace archive {
-///// Serialize a tensor
-//template <class Archive, typename T>
-//struct ArchiveStoreImpl< Archive, GenTensor<T> > {
-//
-//    friend class GenTensor<T>;
-//    /// Stores the GenTensor to an archive
-//    static void store(const Archive& ar, const GenTensor<T>& t) {
-//        LowRankTensor<T> tt(t);
-//        ar & tt;
-//    };
-//};
-//
-//
-///// Deserialize a tensor ... existing tensor is replaced
-//template <class Archive, typename T>
-//struct ArchiveLoadImpl< Archive, GenTensor<T> > {
-//
-//    friend class GenTensor<T>;
-//    /// Replaces this GenTensor with one loaded from an archive
-//    static void load(const Archive& ar, GenTensor<T>& t) {
-//        LowRankTensor<T> tt;
-//        ar & tt;
-//        t=tt;
-//    };
-//};
-//};
+namespace archive {
+/// Serialize a tensor
+template <class Archive, typename T>
+struct ArchiveStoreImpl< Archive, GenTensor<T> > {
+
+    friend class GenTensor<T>;
+    /// Stores the GenTensor to an archive
+    static void store(const Archive& ar, const GenTensor<T>& t) {
+        LowRankTensor<T> tt(t);
+        ar & tt;
+    };
+};
+
+
+/// Deserialize a tensor ... existing tensor is replaced
+template <class Archive, typename T>
+struct ArchiveLoadImpl< Archive, GenTensor<T> > {
+
+    friend class GenTensor<T>;
+    /// Replaces this GenTensor with one loaded from an archive
+    static void load(const Archive& ar, GenTensor<T>& t) {
+        LowRankTensor<T> tt;
+        ar & tt;
+        t=tt;
+    };
+};
+};
 
 }
 #endif /* USE_LRT */

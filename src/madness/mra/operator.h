@@ -1211,7 +1211,7 @@ namespace madness {
             const std::vector<Slice> s00(coeff.ndim(),Slice(0,k-1));
 
             // some checks
-            MADNESS_ASSERT(coeff.tensor_type()==TT_2D);           // for now
+            MADNESS_ASSERT(coeff.is_svd_tensor());           // for now
             MADNESS_ASSERT(not modified());
             MADNESS_ASSERT(not doleaves);
             MADNESS_ASSERT(coeff.dim(0)==2*k);
@@ -1302,9 +1302,9 @@ namespace madness {
             typedef TENSOR_RESULT_TYPE(T,Q) resultT;
 
             MADNESS_ASSERT(coeff.ndim()==NDIM);
-            MADNESS_ASSERT(coeff.tensor_type()==TT_2D);	// we use the rank below
+            MADNESS_ASSERT(coeff.is_svd_tensor());	// we use the rank below
 //            MADNESS_EXCEPTION("no apply2",1);
-            const TensorType tt=coeff.tensor_type();
+            const TensorType tt=TT_2D;
 
             const GenTensor<T>* input = &coeff;
             GenTensor<T> dummy;
@@ -1317,7 +1317,7 @@ namespace madness {
                     // it is not necessary.  It is necessary for operators such
                     // as differentiation and time evolution and will also occur
                     // if the application of the operator widens the tree.
-                    dummy = GenTensor<T>(v2k,coeff.tensor_type());
+                    dummy = GenTensor<T>(v2k,TT_2D);
                     dummy(s0) += coeff;
                     input = &dummy;
                 }
@@ -1406,10 +1406,10 @@ namespace madness {
                 const GenTensor<T>& coeff,
                 double tol, double tol2) const {
 
-            if (coeff.tensor_type()==TT_FULL) return 0.5;
+            if (coeff.is_full_tensor()) return 0.5;
             if (2*NDIM==coeff.ndim()) return 1.5;
             MADNESS_ASSERT(NDIM==coeff.ndim());
-            MADNESS_ASSERT(coeff.tensor_type()==TT_2D);
+            MADNESS_ASSERT(coeff.is_svd_tensor());
 
             const SeparatedConvolutionData<Q,NDIM>* op = getop(source.level(), shift, source);
 

@@ -371,6 +371,7 @@ namespace madness {
         		initialize<int>("maxsub",2);
         		initialize<bool>("restart",false);
         		initialize<int>("maxiter",5);
+        		initialize<std::vector<std::string> >("read_functions",{""},"read functions instead of calculate them");
 
         		read_and_set_derived_values(world);
 
@@ -400,7 +401,23 @@ namespace madness {
         	int restart() const {return this->get<bool>("restart");}	/// convenience function
         	int maxiter() const {return this->get<int>("maxiter");}	/// convenience function
         	int maxsub() const {return this->get<int>("maxsub");}	/// convenience function
-        };
+
+        	bool read_Uphi0() const {
+        		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");
+        		return std::count(v.begin(), v.end(), "uphi0");
+        	}
+
+        	bool read_r12nemo() const {
+        		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");
+        		return std::count(v.begin(), v.end(), "r12nemo");
+        	}
+
+        	bool read_somefunction(const std::string& name) const {
+        		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");
+        		return std::count(v.begin(), v.end(), name);
+        	}
+
+    	};
 
         /// POD holding all electron pairs with easy access
         template<typename T>

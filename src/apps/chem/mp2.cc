@@ -774,14 +774,16 @@ real_function_6d MP2::make_KffKphi0(const ElectronPair& pair) const {
 
 	real_function_6d KffKphi0;
 	real_function_6d r12nemo;
-//	r12nemo = CompositeFactory<double, 6, 3>(world).g12(
-//			corrfac.f()).particle1(copy(hf->nemo(i))).particle2(
-//					copy(hf->nemo(j)));
-//	r12nemo.fill_tree().truncate().reduce_rank();
-//	r12nemo.print_size("r12nemo");
-//	save_function(r12nemo,"r12nemo");
-	load_function(r12nemo,"r12nemo");
-
+	if (param.read_r12nemo()) {
+		load_function(r12nemo,"r12nemo");
+	} else {
+		r12nemo = CompositeFactory<double, 6, 3>(world).g12(
+				corrfac.f()).particle1(copy(hf->nemo(i))).particle2(
+						copy(hf->nemo(j)));
+		r12nemo.fill_tree().truncate().reduce_rank();
+		r12nemo.print_size("r12nemo");
+		save_function(r12nemo,"r12nemo");
+	}
 	real_function_6d Kfphi0;
 	Kfphi0 = K(r12nemo, i == j);
 
@@ -863,30 +865,15 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 	real_convolution_6d green = BSHOperator<6>(world, sqrt(-2.0 * eps), lo,
 			bsh_eps);
 
-    real_function_6d Uphi0 = make_Uphi0(pair);
-	save_function(Uphi0, "Uphi0");
-//	real_function_6d Uphi0;
-//	load_function(Uphi0,"Uphi0");
+	real_function_6d Uphi0;
+	if (param.read_Uphi0()) {
+		load_function(Uphi0,"Uphi0");
+	} else {
+		Uphi0 = make_Uphi0(pair);
+		save_function(Uphi0, "Uphi0");
+	}
 
     real_function_6d KffKphi0 = make_KffKphi0(pair);
-
-//	{
-//		//DEBUG
-//		real_function_6d tmp = Uphi0 - KffKphi0;
-//		tmp.print_size("DEBUG: Uphi0 - KffKphi0");
-//		tmp = Q12(tmp);
-//		tmp.print_size("DEBUG: Q(Uphi0 - KffKphi0)");
-//		real_function_6d GVPhi = green(-2.0*tmp);
-//		GVPhi.print_size("DEBUG: GVPhi");
-//		real_function_6d QGVPhi = Q12(GVPhi);
-//		QGVPhi.print_size("DEBUG: QGVPhi");
-//		pair.constant_term = QGVPhi;
-//		pair.function = QGVPhi;
-//		double tmp_energy = compute_energy(pair);
-//		if(world.rank()==0) std::cout << "DEBUG OUPUT: Init energy is: " << tmp_energy << std::endl;
-//		pair.info(world);
-//		//DEBUG END
-//	}
 
 	// these are the terms that come from the single projectors: (O1 + O2) (U+[K,f])|phi^0>
 	std::vector<real_function_3d> phi_k_UK_phi0;
@@ -1146,9 +1133,12 @@ real_function_6d MP2::K(const real_function_6d& phi,
 	// loop over all orbitals of the reference
 	for (int i = 0; i < hf->nocc(); ++i) {
 		real_function_6d tmp;
-		tmp= apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 1);
-//		save_function(tmp,"tmp");
-//		load_function(tmp,"tmp");
+		if (param.read_somefunction("tmp")) {
+			load_function(tmp,"tmp");
+		} else {
+				tmp= apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 1);
+				save_function(tmp,"tmp");
+		}
 		if (is_symmetric) {
 			tmp = tmp + swap_particles(tmp);
 		} else {

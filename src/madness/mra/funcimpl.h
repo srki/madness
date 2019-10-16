@@ -326,7 +326,7 @@ namespace madness {
                            const Key<NDIM>& key) {
             double cpu0=cpu_time();
             if (has_coeff()) {
-            	MADNESS_ASSERT(coeff().tensor_type()==TT_FULL);
+            	MADNESS_ASSERT(coeff().is_full_tensor());
                 //            	if (coeff().type==TT_FULL) {
                 coeff() += coeffT(t,-1.0,TT_FULL);
                 //            	} else {
@@ -3205,11 +3205,11 @@ namespace madness {
             /// use generalization of tnorm for a GenTensor
             bool screen(const coeffT& fcoeff, const coeffT& gcoeff, const keyT& key) const {
                 double glo=0.0, ghi=0.0, flo=0.0, fhi=0.0;
-                MADNESS_ASSERT(gcoeff.tensor_type()==TT_FULL);
+                MADNESS_ASSERT(gcoeff.is_full_tensor());
                 g.get_impl()->tnorm(gcoeff.full_tensor(), &glo, &ghi);
 
                 // this assumes intimate knowledge of how a GenTensor is organized!
-                MADNESS_ASSERT(fcoeff.tensor_type()==TT_2D);
+                MADNESS_ASSERT(fcoeff.is_svd_tensor());
                 const long rank=fcoeff.rank();
                 const long maxk=fcoeff.dim(0);
                 tensorT vec=fcoeff.get_svdtensor().ref_vector(particle-1).reshape(rank,maxk,maxk,maxk);
@@ -3264,7 +3264,7 @@ namespace madness {
                     hcoeff=h->values2coeffs(key,result_val);
 
                     // conversion on coeffs, not on values, because it implies truncation!
-                    if (hcoeff.tensor_type()!=h->get_tensor_type())
+                    if (not hcoeff.is_of_tensortype(h->get_tensor_type()))
                         hcoeff=hcoeff.convert(h->get_tensor_args());
                 }
 
@@ -4349,7 +4349,7 @@ namespace madness {
                 small++;
                 //double cpu0=cpu_time();
                 coeffT result=coeffT(result_full,apply_targs);
-                MADNESS_ASSERT(result.tensor_type()==TT_FULL or result.tensor_type()==TT_2D);
+                MADNESS_ASSERT(result.is_full_tensor() or result.is_svd_tensor());
                 //double cpu1=cpu_time();
                 //timer_lr_result.accumulate(cpu1-cpu0);
 
@@ -4386,7 +4386,7 @@ namespace madness {
                 small++;
 
                 double cpu0=cpu_time();
-                if (targs.tt!=result.tensor_type()) result=result.convert(targs);
+                if (not result.is_of_tensortype(targs.tt)) result=result.convert(targs);
                 double cpu1=cpu_time();
                 timer_lr_result.accumulate(cpu1-cpu0);
 
@@ -5670,8 +5670,8 @@ namespace madness {
                     return Future<argT> (argT(fnode.is_leaf(),coeffT()));;
 
                 // let's specialize for the time being on SVD tensors for f and full tensors of half dim for g
-                MADNESS_ASSERT(gcoeff.tensor_type()==TT_FULL);
-                MADNESS_ASSERT(fcoeff.tensor_type()==TT_2D);
+                MADNESS_ASSERT(gcoeff.is_full_tensor());
+                MADNESS_ASSERT(fcoeff.is_svd_tensor());
                 const tensorT gtensor=gcoeff.full_tensor();
                 tensorT final(result->cdata.vk);
 
