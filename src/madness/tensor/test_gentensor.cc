@@ -34,8 +34,8 @@
 
 #include <madness/tensor/tensor.h>
 #include <madness/tensor/gentensor.h>
-#include <madness/tensor/lowranktensor.h>
 #include <madness/world/print.h>
+#include "gentensor.h"
 
 #if defined USE_GENTENSOR && MADNESS_HAS_GOOGLE_TEST
 

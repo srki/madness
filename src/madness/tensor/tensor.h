@@ -269,19 +269,6 @@ namespace madness {
     template <class T> class SliceTensor;
 
 
-    /// low rank representations of tensors (see gentensor.h)
-	enum TensorType {TT_FULL, TT_2D, TT_TENSORTRAIN};
-
-    static
-    inline
-    std::ostream& operator << (std::ostream& s, const TensorType& tt) {
-        std::string str="confused tensor type";
-        if (tt==TT_FULL) str="full rank tensor";
-        if (tt==TT_2D) str="low rank tensor 2-way";
-        if (tt==TT_TENSORTRAIN) str="tensor train";
-        s << str.c_str();
-        return s;
-    }
 
     //#define TENSOR_USE_SHARED_ALIGNED_ARRAY
 #ifdef TENSOR_USE_SHARED_ALIGNED_ARRAY

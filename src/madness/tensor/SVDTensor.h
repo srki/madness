@@ -33,6 +33,8 @@
 #ifndef SRC_MADNESS_TENSOR_SVDTENSOR_H_
 #define SRC_MADNESS_TENSOR_SVDTENSOR_H_
 
+#include <madness/tensor/srconf.h>
+
 namespace madness{
 
 
@@ -64,7 +66,6 @@ public:
         base=number;
         return *this;
     }
-
 
     long size() const {
     	return this->nCoeff();

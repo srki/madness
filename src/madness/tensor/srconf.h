@@ -57,7 +57,7 @@ namespace madness {
 
 
 	template <class T> class GenTensor;
-    template <class T> class LowRankTensor;
+    template <class T> class GenTensor;
     template <class T> class SliceLowRankTensor;
 
 	/**
@@ -67,7 +67,7 @@ namespace madness {
 	template <typename T>
 	class SRConf : public BaseTensor {
 		friend class GenTensor<T>;
-		friend class LowRankTensor<T>;
+		friend class GenTensor<T>;
         friend class SliceLowRankTensor<T>;
 
 		/// the scalar type of T
@@ -135,19 +135,6 @@ namespace madness {
 		SRConf(const long& ndim, const std::array<long,TENSOR_MAXDIM>& dimensions,
 				const long nci) : SRConf(ndim,dimensions.data(),nci) {
 		}
-
-//		/// ctor with dimensions for a vector configuration (tested)
-//
-//		/// @param[in]	nci0 	number of collapsed indices for the left vectors
-//		SRConf(const long& ndim, const long& k, const long nci) {
-//
-//			std::array<long,TENSOR_MAXDIM> dimensions;
-//			dimensions.fill(k);
-//    		BaseTensor::set_dims_and_size(ndim,dimensions.data());
-//			if (nci_left<0) nci_left=ndim/2;	// integer division
-//			make_structure();
-//
-//		}
 
 		/// copy ctor (tested); shallow copy
 		SRConf(const SRConf& rhs) = default;

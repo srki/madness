@@ -5,23 +5,28 @@
  *      Author: fbischoff
  */
 
-#include "lowranktensor.h"
+#ifndef USE_GENTENSOR
+#define USE_GENTENSOR
+#endif
+
+#include <madness/tensor/gentensor.h>
+#include <madness/tensor/lowranktensor.h>
 
 
 using namespace madness;
 
 template<typename T>
-double compute_difference(const LowRankTensor<T>& lrt1, const LowRankTensor<T>& lrt2) {\
+double compute_difference(const GenTensor<T>& lrt1, const GenTensor<T>& lrt2) {\
 	return (lrt1.full_tensor_copy()-lrt2.full_tensor_copy()).normf();
 }
 
 template<typename T>
-double compute_difference(const LowRankTensor<T>& lrt1, const Tensor<T>& t2) {\
+double compute_difference(const GenTensor<T>& lrt1, const Tensor<T>& t2) {\
 	return (lrt1.full_tensor_copy()-t2).normf();
 }
 
 template<typename T>
-double compute_difference(const Tensor<T>& t2, const LowRankTensor<T>& lrt1) {\
+double compute_difference(const Tensor<T>& t2, const GenTensor<T>& lrt1) {\
 	return (lrt1.full_tensor_copy()-t2).normf();
 }
 
@@ -47,20 +52,20 @@ int test_constructor() {
 		SVDTensor<T> svd(tensor,thresh);
 		TensorTrain<T> tt(tensor,thresh);
 
-		LowRankTensor<T> lrt;
-		LowRankTensor<T> lrt1(tensor);
-		LowRankTensor<T> lrt2(tensor,thresh,TT_2D);
-		LowRankTensor<T> lrt3(tensor,thresh,TT_TENSORTRAIN);
-		LowRankTensor<T> lrt4(tensor,thresh,TT_FULL);
-		LowRankTensor<T> lrt5(lrt4);
+		GenTensor<T> lrt;
+		GenTensor<T> lrt1(tensor);
+		GenTensor<T> lrt2(tensor,thresh,TT_2D);
+		GenTensor<T> lrt3(tensor,thresh,TT_TENSORTRAIN);
+		GenTensor<T> lrt4(tensor,thresh,TT_FULL);
+		GenTensor<T> lrt5(lrt4);
 
-		LowRankTensor<T> lrt6(svd);
-		LowRankTensor<T> lrt7(tt);
+		GenTensor<T> lrt6(svd);
+		GenTensor<T> lrt7(tt);
 
-		LowRankTensor<T> lrt8(dim,TT_FULL);
-		LowRankTensor<T> lrt9(dim,TT_2D);
-		LowRankTensor<T> lrt10(dim,TT_TENSORTRAIN);
-		LowRankTensor<T> lrt11(TT_2D,dim[0],dim.size());
+		GenTensor<T> lrt8(dim,TT_FULL);
+		GenTensor<T> lrt9(dim,TT_2D);
+		GenTensor<T> lrt10(dim,TT_TENSORTRAIN);
+		GenTensor<T> lrt11(TT_2D,dim[0],dim.size());
 		tensor.fillrandom();
 
 	}
@@ -79,10 +84,10 @@ int test_reconstruct() {
 	double thresh=1.e-5;
 	double error=0.0;
 
-	LowRankTensor<T> lrt1(tensor);
-	LowRankTensor<T> lrt2(tensor,thresh,TT_2D);
-	LowRankTensor<T> lrt3(tensor,thresh,TT_TENSORTRAIN);
-	LowRankTensor<T> lrt4(tensor,thresh,TT_FULL);
+	GenTensor<T> lrt1(tensor);
+	GenTensor<T> lrt2(tensor,thresh,TT_2D);
+	GenTensor<T> lrt3(tensor,thresh,TT_TENSORTRAIN);
+	GenTensor<T> lrt4(tensor,thresh,TT_FULL);
 
 	double error1=compute_difference(lrt1,tensor);
 	double error2=compute_difference(lrt2,tensor);
@@ -109,8 +114,8 @@ int test_addition(const TensorType& tt) {
 	tensor.fillrandom();
 	double error=0.0;
 
-	LowRankTensor<T> lrt1(tensor,TensorArgs(1.e-4,tt));
-	LowRankTensor<T> lrt2(tensor,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt1(tensor,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt2(tensor,TensorArgs(1.e-4,tt));
 	Tensor<T> tensor2=copy(tensor);
 	lrt2+=lrt1;
 	tensor2+=tensor;
@@ -119,13 +124,13 @@ int test_addition(const TensorType& tt) {
 	error+=error1;
 
 	Tensor<T> tensor3=tensor+tensor;
-	LowRankTensor<T> lrt3=lrt1+lrt1;
+	GenTensor<T> lrt3=lrt1+lrt1;
 	double error2=compute_difference(lrt3,tensor3);
 	print("error2",error2);
 	error+=error2;
 
 	Tensor<T> tensor4=tensor-tensor2;
-	LowRankTensor<T> lrt4=lrt1-lrt2;
+	GenTensor<T> lrt4=lrt1-lrt2;
 	double error4=compute_difference(lrt4,tensor4);
 	print("error4",error4);
 	error+=error4;
@@ -171,8 +176,8 @@ int test_sliced_addition(const TensorType& tt) {
 	std::vector<Slice> s1={_,_,Slice(0,8),Slice(3,5)};
 	std::vector<Slice> s2={_,_,Slice(1,9),Slice(2,4)};
 
-	LowRankTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
-	LowRankTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
 
 	tensor1(s1)+=tensor2(s2);
 	lrt1(s1)+=lrt2(s2);
@@ -197,8 +202,8 @@ int test_reduce_rank(const TensorType& tt) {
 	double error=0.0;
 	double thresh=1.e-5;
 
-	LowRankTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
-	LowRankTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
 
 	tensor1+=tensor2;
 	lrt1+=lrt2;
@@ -226,8 +231,8 @@ int test_emul(const TensorType& tt) {
 	double error=0.0;
 	double thresh=1.e-5;
 
-	LowRankTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
-	LowRankTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt1(tensor1,TensorArgs(1.e-4,tt));
+	GenTensor<T> lrt2(tensor2,TensorArgs(1.e-4,tt));
 
 	tensor1.emul(tensor2);
 	lrt1.emul(lrt2);
@@ -248,14 +253,14 @@ int test_convert() {
 	tensor.fillrandom();
 	double thresh=1.e-5;
 
-	LowRankTensor<T> lrt(tensor);
-	LowRankTensor<T> lrt1=lrt.convert(TensorArgs(TT_2D,thresh));
-	LowRankTensor<T> lrt2=lrt.convert(TensorArgs(TT_TENSORTRAIN,thresh));
+	GenTensor<T> lrt(tensor);
+	GenTensor<T> lrt1=lrt.convert(TensorArgs(TT_2D,thresh));
+	GenTensor<T> lrt2=lrt.convert(TensorArgs(TT_TENSORTRAIN,thresh));
 
-	LowRankTensor<T> lrt3=lrt1.convert(TensorArgs(TT_FULL,thresh));
-	LowRankTensor<T> lrt4=lrt2.convert(TensorArgs(TT_FULL,thresh));
+	GenTensor<T> lrt3=lrt1.convert(TensorArgs(TT_FULL,thresh));
+	GenTensor<T> lrt4=lrt2.convert(TensorArgs(TT_FULL,thresh));
 
-	LowRankTensor<T> lrt5=lrt2.convert(TensorArgs(TT_2D,thresh));
+	GenTensor<T> lrt5=lrt2.convert(TensorArgs(TT_2D,thresh));
 
 	double error1=compute_difference(lrt1,tensor);
 	double error2=compute_difference(lrt2,tensor);
@@ -287,12 +292,12 @@ int test_general_transform() {
 		cc[idim].fillrandom();
 	}
 
-	LowRankTensor<T> lrt1(tensor);
-	LowRankTensor<T> lrt2(tensor,thresh,TT_TENSORTRAIN);
-	LowRankTensor<T> lrt3(tensor,thresh,TT_2D);
-	LowRankTensor<T> result1=general_transform(lrt1,cc);
-	LowRankTensor<T> result2=general_transform(lrt2,cc);
-	LowRankTensor<T> result3=general_transform(lrt3,cc);
+	GenTensor<T> lrt1(tensor);
+	GenTensor<T> lrt2(tensor,thresh,TT_TENSORTRAIN);
+	GenTensor<T> lrt3(tensor,thresh,TT_2D);
+	GenTensor<T> result1=general_transform(lrt1,cc);
+	GenTensor<T> result2=general_transform(lrt2,cc);
+	GenTensor<T> result3=general_transform(lrt3,cc);
 
 	double error2=(result2.full_tensor_copy()-result1.full_tensor_copy()).normf();
 	double error3=(result2.full_tensor_copy()-result1.full_tensor_copy()).normf();

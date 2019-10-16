@@ -1015,7 +1015,7 @@ void test(const long& k, const long& dim, const TensorArgs& targs) {
 
 	GenTensor<double> r(t[2],targs);
 	int maxrank=r.rank();
-	GenTensor<double> rr=copy(r.get_svdtensor().get_configs(0,maxrank/2));
+	GenTensor<double> rr=copy(SVDTensor<double>(r.get_svdtensor().get_configs(0,maxrank/2)));
 	Tensor<double> reftensor=rr.full_tensor_copy();
 
 	TensorTrain<double> tt(reftensor,targs.thresh);

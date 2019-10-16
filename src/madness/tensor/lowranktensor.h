@@ -40,12 +40,10 @@
 
 #include <madness/world/madness_exception.h>
 #include <madness/world/print.h>
-#include <madness/tensor/gentensor.h>
 #include <madness/tensor/slice.h>
-#include "srconf.h"
 #include <madness/tensor/SVDTensor.h>
-#include "tensor.h"
-#include "tensortrain.h"
+#include <madness/tensor/tensor.h>
+#include <madness/tensor/tensortrain.h>
 #include "type_data.h"
 
 namespace madness {
@@ -56,7 +54,7 @@ template <class T> class SliceLowRankTensor;
 
 
 template<typename T>
-class LowRankTensor {
+class GenTensor {
 
 public:
 
@@ -69,12 +67,12 @@ public:
     typedef typename TensorTypeData<T>::float_scalar_type float_scalar_type;
 
     /// empty ctor
-    LowRankTensor() = default;
+    GenTensor() = default;
 
     /// copy ctor, shallow
-    LowRankTensor(const LowRankTensor<T>& other) = default;
+    GenTensor(const GenTensor<T>& other) = default;
 
-    LowRankTensor(const long ndim, const long* dims, const TensorType& tt) {
+    GenTensor(const long ndim, const long* dims, const TensorType& tt) {
         if (tt==TT_FULL) tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(ndim, dims));
         if (tt==TT_2D) tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(ndim, dims));
         if (tt==TT_TENSORTRAIN) tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(ndim, dims));
@@ -82,34 +80,34 @@ public:
 
 
     /// ctor with dimensions; constructs tensor filled with zeros
-    LowRankTensor(const std::vector<long>& dim, const TensorType& tt) :
-    	LowRankTensor(long(dim.size()),&dim.front(),tt) {
+    GenTensor(const std::vector<long>& dim, const TensorType& tt) :
+    	GenTensor(long(dim.size()),&dim.front(),tt) {
     }
 
     /// ctor with dimensions; constructs tensor filled with zeros
-    LowRankTensor(const std::vector<long>& dim, const TensorArgs& targs) :
-        LowRankTensor(dim, targs.tt) {
+    GenTensor(const std::vector<long>& dim, const TensorArgs& targs) :
+        GenTensor(dim, targs.tt) {
     }
 
     /// ctor with dimensions; all dims have the same value k
-    LowRankTensor(const TensorType& tt, const long k, const long ndim) :
-        LowRankTensor(std::vector<long>(ndim,k), tt) {
+    GenTensor(const TensorType& tt, const long k, const long ndim) :
+        GenTensor(std::vector<long>(ndim,k), tt) {
     }
 
     /// ctor with a regular Tensor and arguments, deep
-    LowRankTensor(const Tensor<T>& rhs, const double& thresh, const TensorType& tt) :
-        LowRankTensor(rhs,TensorArgs(thresh,tt)) {
+    GenTensor(const Tensor<T>& rhs, const double& thresh, const TensorType& tt) :
+        GenTensor(rhs,TensorArgs(thresh,tt)) {
     }
 
     /// ctor with a regular Tensor and arguments, deep
-    LowRankTensor(const Tensor<T>& rhs, const TensorArgs& targs) {
+    GenTensor(const Tensor<T>& rhs, const TensorArgs& targs) {
         if (targs.tt==TT_FULL) tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(rhs)));
         else if (targs.tt==TT_2D) {
         	if (rhs.size()==0) {
         		tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
         	} else {
 				TensorTrain<T> tt(rhs,targs.thresh*facReduce());
-				LowRankTensor<T> tmp=tt;
+				GenTensor<T> tmp=tt;
 				*this=tmp.convert(targs);
         	}
 //        	tensor=SVDTensor<T>(rhs,targs.thresh*facReduce());
@@ -123,51 +121,51 @@ public:
     }
 
     /// ctor with a regular Tensor, deep
-    LowRankTensor(const Tensor<T>& other)  {
+    GenTensor(const Tensor<T>& other)  {
     	tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(other)));
     }
 
     /// ctor with a TensorTrain as argument, shallow
-    LowRankTensor(const TensorTrain<T>& other) {
+    GenTensor(const TensorTrain<T>& other) {
     	tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(copy(other))) ;
     }
 
     /// ctor with a SVDTensor as argument, shallow
-    LowRankTensor(const SVDTensor<T>& other) {
+    GenTensor(const SVDTensor<T>& other) {
     	tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(copy(other)));
     }
 
     /// ctor with a SliceLowRankTensor as argument, deep
-    LowRankTensor(const SliceLowRankTensor<T>& other) {
+    GenTensor(const SliceLowRankTensor<T>& other) {
         *this=other;
     }
 
     /// shallow assignment operator
-    LowRankTensor& operator=(const LowRankTensor<T>& other) {
+    GenTensor& operator=(const GenTensor<T>& other) {
         if (this!=&other) tensor=other.tensor;
         return *this;
     }
 
     /// deep assignment operator
-    LowRankTensor& operator=(const Tensor<T>& other) {
+    GenTensor& operator=(const Tensor<T>& other) {
         tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(other)));
         return *this;
     }
 
     /// deep assignment operator
-    LowRankTensor& operator=(const SVDTensor<T>& other) {
+    GenTensor& operator=(const SVDTensor<T>& other) {
         tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(copy(other)));
         return *this;
     }
 
     /// deep assignment operator
-    LowRankTensor& operator=(const TensorTrain<T>& other) {
+    GenTensor& operator=(const TensorTrain<T>& other) {
         tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(copy(other)));
         return *this;
     }
 
     /// deep assignment with slices: g0 = g1(s)
-    LowRankTensor& operator=(const SliceLowRankTensor<T>& other) {
+    GenTensor& operator=(const SliceLowRankTensor<T>& other) {
         const std::array<Slice,TENSOR_MAXDIM>& s=other.thisslice;
         MADNESS_ASSERT(other.lrt->is_assigned());
         if (other.lrt->is_full_tensor())
@@ -183,9 +181,9 @@ public:
     }
 
     /// Type conversion makes a deep copy
-    template <class Q> operator LowRankTensor<Q>() const { // type conv => deep copy
+    template <class Q> operator GenTensor<Q>() const { // type conv => deep copy
 
-        LowRankTensor<Q> result;
+        GenTensor<Q> result;
         if (is_full_tensor()) {
             result=Tensor<Q>(get_tensor());
         } else if (is_svd_tensor()) {
@@ -262,8 +260,8 @@ public:
 
 
     /// deep copy
-    friend LowRankTensor copy(const LowRankTensor& other) {
-    	LowRankTensor<T> result;
+    friend GenTensor copy(const GenTensor& other) {
+    	GenTensor<T> result;
     	if (other.is_assigned()) std::visit([&result](auto& obj) {result=copy(*obj);}, other.tensor);
         return result;
     }
@@ -296,7 +294,7 @@ public:
     }
 
     template<typename Q, typename R>
-    friend bool is_same_tensor_type(const LowRankTensor<R>& rhs, const LowRankTensor<Q>& lhs) {
+    friend bool is_same_tensor_type(const GenTensor<R>& rhs, const GenTensor<Q>& lhs) {
     	return (rhs.tensor.index()==lhs.tensor.index());
     }
 
@@ -304,7 +302,7 @@ public:
     	return is_assigned() ? tensor.index() : -1;
     }
 
-    LowRankTensor& convert_inplace(const TensorArgs& targs) {
+    GenTensor& convert_inplace(const TensorArgs& targs) {
 
     	// fast return
     	if (is_of_tensortype(targs.tt)) return *this;
@@ -316,7 +314,7 @@ public:
 
     	// source is full tensor: construct the corresponding representation
     	else if (is_full_tensor()) {
-    		*this=LowRankTensor<T>(get_tensor(),targs);
+    		*this=GenTensor<T>(get_tensor(),targs);
     	}
 
     	// TT_TENSORTRAIN TO TT_2D
@@ -347,15 +345,15 @@ public:
     }
 
     /// convert this to a new LowRankTensor of given tensor type
-    LowRankTensor convert(const TensorArgs& targs) const {
+    GenTensor convert(const TensorArgs& targs) const {
 
     	// deep copy for same type
     	if (is_of_tensortype(targs.tt)) return copy(*this);
 
     	// new LRT will be newly constructed anyways
-    	if (is_full_tensor()) return LowRankTensor<T>(get_tensor(),targs);
+    	if (is_full_tensor()) return GenTensor<T>(get_tensor(),targs);
 
-    	LowRankTensor<T> result(*this);	// shallow
+    	GenTensor<T> result(*this);	// shallow
     	result.convert_inplace(targs);
     	return result;
     }
@@ -399,7 +397,7 @@ public:
     /// @param[in] x Scalar value
     /// @return %Reference to this tensor
     template <typename Q>
-    typename IsSupported<TensorTypeData<Q>,LowRankTensor<T>&>::type
+    typename IsSupported<TensorTypeData<Q>,GenTensor<T>&>::type
     scale(Q fac) {
     	if (not is_assigned()) return *this;
         std::visit([&fac](auto& obj) {obj->scale(T(fac));}, tensor);
@@ -472,7 +470,7 @@ public:
 
     /// returns the trace of <this|rhs>
     template<typename Q>
-    TENSOR_RESULT_TYPE(T,Q) trace_conj(const LowRankTensor<Q>& rhs) const {
+    TENSOR_RESULT_TYPE(T,Q) trace_conj(const GenTensor<Q>& rhs) const {
 
         if (TensorTypeData<T>::iscomplex) MADNESS_EXCEPTION("no complex trace in LowRankTensor, sorry",1);
         if (TensorTypeData<Q>::iscomplex) MADNESS_EXCEPTION("no complex trace in LowRankTensor, sorry",1);
@@ -494,57 +492,57 @@ public:
 
     /// multiply with a number
     template<typename Q>
-    LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> operator*(const Q& x) const {
-        LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> result(copy(*this));
+    GenTensor<TENSOR_RESULT_TYPE(T,Q)> operator*(const Q& x) const {
+        GenTensor<TENSOR_RESULT_TYPE(T,Q)> result(copy(*this));
         result.scale(x);
         return result;
     }
 
-    LowRankTensor operator+(const LowRankTensor& other) {
-    	LowRankTensor<T> result=copy(*this);
+    GenTensor operator+(const GenTensor& other) {
+    	GenTensor<T> result=copy(*this);
         result.gaxpy(1.0,other,1.0);
         return result;
     }
 
-    LowRankTensor operator+(const SliceLowRankTensor<T>& other) {
-    	LowRankTensor<T> result=copy(*this);
+    GenTensor operator+(const SliceLowRankTensor<T>& other) {
+    	GenTensor<T> result=copy(*this);
     	std::array<Slice,TENSOR_MAXDIM> s0;
     	s0.fill(_);
         result.gaxpy(1.0,s0,other,1.0,other.thisslice);
         return result;
     }
 
-    LowRankTensor& operator+=(const LowRankTensor& other) {
+    GenTensor& operator+=(const GenTensor& other) {
         gaxpy(1.0,other,1.0);
         return *this;
     }
 
-    LowRankTensor& operator+=(const SliceLowRankTensor<T>& other) {
+    GenTensor& operator+=(const SliceLowRankTensor<T>& other) {
     	std::array<Slice,TENSOR_MAXDIM> s0;
     	s0.fill(_);
         this->gaxpy(1.0,s0,*other.lrt,1.0,other.thisslice);
         return *this;
     }
 
-    LowRankTensor operator-(const LowRankTensor& other) {
-    	LowRankTensor<T> result=copy(*this);
+    GenTensor operator-(const GenTensor& other) {
+    	GenTensor<T> result=copy(*this);
         result.gaxpy(1.0,other,-1.0);
         return result;
     }
 
-    LowRankTensor& operator-=(const LowRankTensor& other) {
+    GenTensor& operator-=(const GenTensor& other) {
         gaxpy(1.0,other,-1.0);
         return *this;
     }
 
-    LowRankTensor& operator-=(const SliceLowRankTensor<T>& other) {
+    GenTensor& operator-=(const SliceLowRankTensor<T>& other) {
     	std::array<Slice,TENSOR_MAXDIM> s0;
     	s0.fill(_);
         this->gaxpy(1.0,s0,*other.lrt,-1.0,other.thisslice);
         return *this;
     }
 
-    LowRankTensor& gaxpy(const T alpha, const LowRankTensor& other, const T beta) {
+    GenTensor& gaxpy(const T alpha, const GenTensor& other, const T beta) {
 
     	// deliberately excluding gaxpys for different tensors due to efficiency considerations!
     	MADNESS_ASSERT(is_same_tensor_type(*this,other));
@@ -557,8 +555,8 @@ public:
         return *this;
     }
 
-    LowRankTensor& gaxpy(const T alpha, std::array<Slice,TENSOR_MAXDIM> s0,
-    		const LowRankTensor& other, const T beta, std::array<Slice,TENSOR_MAXDIM> s1) {
+    GenTensor& gaxpy(const T alpha, std::array<Slice,TENSOR_MAXDIM> s0,
+    		const GenTensor& other, const T beta, std::array<Slice,TENSOR_MAXDIM> s1) {
 
     	// deliberately excluding gaxpys for different tensors due to efficiency considerations!
     	MADNESS_ASSERT(is_same_tensor_type(*this,other));
@@ -578,12 +576,12 @@ public:
 
 
     /// assign a number to this tensor
-    LowRankTensor& operator=(const T& number) {
+    GenTensor& operator=(const T& number) {
         std::visit([&number](auto& obj) {*obj=number;}, tensor);
         return *this;
     }
 
-    void add_SVD(const LowRankTensor& other, const double& thresh) {
+    void add_SVD(const GenTensor& other, const double& thresh) {
         if (is_full_tensor()) get_tensor()+=get_tensor();
         else if (is_svd_tensor()) get_svdtensor().add_SVD(other.get_svdtensor(),thresh*facReduce());
         else if (is_tensortrain()) get_tensortrain()+=(other.get_tensortrain());
@@ -593,7 +591,7 @@ public:
     }
 
     /// Inplace multiply by corresponding elements of argument Tensor
-    LowRankTensor<T>& emul(const LowRankTensor<T>& other) {
+    GenTensor<T>& emul(const GenTensor<T>& other) {
 
     	// deliberately excluding emuls for different tensors due to efficiency considerations!
     	MADNESS_ASSERT(is_same_tensor_type(*this,other));
@@ -629,10 +627,10 @@ public:
     /// the first dimension of \c c .  The dimensions of \c c may differ in
     /// size.
     template <typename R, typename Q>
-    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> transform(
-            const LowRankTensor<R>& t, const Tensor<Q>& c) {
+    friend GenTensor<TENSOR_RESULT_TYPE(R,Q)> transform(
+            const GenTensor<R>& t, const Tensor<Q>& c) {
     	typedef TENSOR_RESULT_TYPE(R,Q) resultT;
-    	LowRankTensor<resultT> result;
+    	GenTensor<resultT> result;
         std::visit([&result, &c](auto& obj) {result=transform(*obj,c);}, t.tensor);
         return result;
     }
@@ -648,10 +646,10 @@ public:
     /// The first dimension of the matrices c must match the corresponding
     /// dimension of t.    template <typename R, typename Q>
     template <typename R, typename Q>
-    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> general_transform(
-            const LowRankTensor<R>& t, const Tensor<Q> c[]) {
+    friend GenTensor<TENSOR_RESULT_TYPE(R,Q)> general_transform(
+            const GenTensor<R>& t, const Tensor<Q> c[]) {
     	typedef TENSOR_RESULT_TYPE(R,Q) resultT;
-    	LowRankTensor<resultT> result;
+    	GenTensor<resultT> result;
         std::visit([&result, &c](auto& obj) {result=general_transform(*obj,c);}, t.tensor);
         return result;
     }
@@ -667,16 +665,24 @@ public:
     /// @param[in] axis Dimension (or axis) to be transformed
     /// @result Returns a new, contiguous tensor    template <typename R, typename Q>
     template <typename R, typename Q>
-    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> transform_dir(
-            const LowRankTensor<R>& t, const Tensor<Q>& c, const int axis) {
-    	LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> result;
+    friend GenTensor<TENSOR_RESULT_TYPE(R,Q)> transform_dir(
+            const GenTensor<R>& t, const Tensor<Q>& c, const int axis) {
+    	GenTensor<TENSOR_RESULT_TYPE(R,Q)> result;
         std::visit([&result, &c, &axis](auto& obj) {result=transform_dir(*obj,c,axis);}, t.tensor);
         return result;
     }
 
     template <typename R, typename Q>
-    friend LowRankTensor<TENSOR_RESULT_TYPE(R,Q)> outer(
-            const LowRankTensor<R>& t1, const LowRankTensor<Q>& t2);
+    friend GenTensor<TENSOR_RESULT_TYPE(R,Q)> outer(
+            const GenTensor<R>& t1, const GenTensor<Q>& t2);
+
+	std::string what_am_i() const {
+		TensorType tt;
+		if (this->is_full_tensor()) tt=TT_FULL;
+		if (this->is_svd_tensor()) tt=TT_2D;
+		if (this->is_tensortrain()) tt=TT_TENSORTRAIN;
+		return TensorArgs::what_am_i(tt);
+	};
 
 private:
 
@@ -700,11 +706,11 @@ private:
 namespace archive {
     /// Serialize a tensor
     template <class Archive, typename T>
-	struct ArchiveStoreImpl< Archive, LowRankTensor<T> > {
+	struct ArchiveStoreImpl< Archive, GenTensor<T> > {
 
-		friend class LowRankTensor<T>;
+		friend class GenTensor<T>;
 		/// Stores the GenTensor to an archive
-		static void store(const Archive& ar, const LowRankTensor<T>& t) {
+		static void store(const Archive& ar, const GenTensor<T>& t) {
 			int index1=t.index();
 			ar & index1;
 			if (index1==0) {
@@ -723,11 +729,11 @@ namespace archive {
 
 	/// Deserialize a tensor ... existing tensor is replaced
 	template <class Archive, typename T>
-	struct ArchiveLoadImpl< Archive, LowRankTensor<T> > {
+	struct ArchiveLoadImpl< Archive, GenTensor<T> > {
 
-		friend class LowRankTensor<T>;
+		friend class GenTensor<T>;
 		/// Replaces this GenTensor with one loaded from an archive
-		static void load(const Archive& ar, LowRankTensor<T>& tensor) {
+		static void load(const Archive& ar, GenTensor<T>& tensor) {
 			int index;
 			ar & index;
 			if (index==0) {
@@ -753,12 +759,12 @@ namespace archive {
 
 /// @result Returns a new tensor that is a deep copy of the input
 template <class Q, class T>
-LowRankTensor<Q> convert(const LowRankTensor<T>& other) {
+GenTensor<Q> convert(const GenTensor<T>& other) {
 
 	// simple return
 	if (std::is_same<Q, T>::value) return copy(other);
 
-	LowRankTensor<Q> result;
+	GenTensor<Q> result;
     if (other.is_full_tensor())
         result=Tensor<Q>(convert<Q,T>(other.get_tensor()));
     if (other.is_svd_tensor())
@@ -769,6 +775,12 @@ LowRankTensor<Q> convert(const LowRankTensor<T>& other) {
 }
 
 
+/// change representation to targ.tt
+template<typename T>
+void change_tensor_type(GenTensor<T>& t, const TensorArgs& targs) {
+	t.convert_inplace(targs);
+}
+
 /// outer product of two Tensors, yielding a low rank tensor
 
 /// do the outer product of two tensors; distinguish these tensortype cases by
@@ -778,8 +790,8 @@ LowRankTensor<Q> convert(const LowRankTensor<T>& other) {
 ///  - TensorTrain x TensorTrain -> TensorTrain
 /// all other combinations are currently invalid.
 template <class T, class Q>
-LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
-        const LowRankTensor<Q>& t2, const TensorArgs final_tensor_args) {
+GenTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const GenTensor<T>& t1,
+        const GenTensor<Q>& t2, const TensorArgs final_tensor_args) {
 
     typedef TENSOR_RESULT_TYPE(T,Q) resultT;
 
@@ -789,7 +801,7 @@ LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
     if (final_tensor_args.tt==TT_FULL) {
         MADNESS_ASSERT(t1.is_full_tensor());
         Tensor<resultT> t(outer(t1.get_tensor(),t2.get_tensor()));
-        return LowRankTensor<resultT>(t);
+        return GenTensor<resultT>(t);
 
     } else if (final_tensor_args.tt==TT_2D) {
         MADNESS_ASSERT(t1.is_full_tensor());
@@ -815,7 +827,7 @@ LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
 
         SRConf<resultT> srconf(weights,lhs.reshape(1,lhs.size()),rhs.reshape(1,rhs.size()),ndim,dims.data(),t1.ndim());
 //        srconf.normalize();
-        return LowRankTensor<resultT>(SVDTensor<resultT>(srconf));
+        return GenTensor<resultT>(SVDTensor<resultT>(srconf));
 
     } else if (final_tensor_args.tt==TT_TENSORTRAIN) {
         MADNESS_ASSERT(t1.is_tensortrain());
@@ -824,15 +836,39 @@ LowRankTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const LowRankTensor<T>& t1,
     } else {
         MADNESS_EXCEPTION("you should not be here",1);
     }
-    return LowRankTensor<TENSOR_RESULT_TYPE(T,Q)>();
+    return GenTensor<TENSOR_RESULT_TYPE(T,Q)>();
 
+}
+
+
+/// outer product of two Tensors, yielding a low rank tensor
+template <class T, class Q>
+GenTensor<TENSOR_RESULT_TYPE(T,Q)> outer(const Tensor<T>& lhs2,
+        const Tensor<Q>& rhs2, const TensorArgs final_tensor_args) {
+
+    typedef TENSOR_RESULT_TYPE(T,Q) resultT;
+
+    // prepare lo-dim tensors for the outer product
+    TensorArgs targs;
+    targs.thresh=final_tensor_args.thresh;
+    if (final_tensor_args.tt==TT_FULL) targs.tt=TT_FULL;
+    else if (final_tensor_args.tt==TT_2D) targs.tt=TT_FULL;
+    else if (final_tensor_args.tt==TT_TENSORTRAIN) targs.tt=TT_TENSORTRAIN;
+    else {
+        MADNESS_EXCEPTION("confused tensor args in outer_low_rank",1);
+    }
+
+    GenTensor<T> lhs(lhs2,targs);
+    GenTensor<Q> rhs(rhs2,targs);
+    GenTensor<resultT> result=outer(lhs,rhs,final_tensor_args);
+    return result;
 }
 
 
 /// The class defines tensor op scalar ... here define scalar op tensor.
 template <typename T, typename Q>
-typename IsSupported < TensorTypeData<Q>, LowRankTensor<T> >::type
-operator*(const Q& x, const LowRankTensor<T>& t) {
+typename IsSupported < TensorTypeData<Q>, GenTensor<T> >::type
+operator*(const Q& x, const GenTensor<T>& t) {
     return t*x;
 }
 
@@ -845,9 +881,9 @@ operator*(const Q& x, const LowRankTensor<T>& t) {
  /// @param[in]  are_optimal flag if the GenTensors in the list are already in SVD format (if TT_2D)
  /// @return     the sum GenTensor of the input GenTensors
  template<typename T>
- LowRankTensor<T> reduce(std::list<LowRankTensor<T> >& addends, double eps, bool are_optimal=false) {
-     typedef typename std::list<LowRankTensor<T> >::iterator iterT;
-     LowRankTensor<T> result=copy(addends.front());
+ GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_optimal=false) {
+     typedef typename std::list<GenTensor<T> >::iterator iterT;
+     GenTensor<T> result=copy(addends.front());
       for (iterT it=++addends.begin(); it!=addends.end(); ++it) {
           result+=*it;
       }
@@ -864,7 +900,7 @@ class SliceLowRankTensor {
 public:
 
     std::array<Slice,TENSOR_MAXDIM> thisslice;
-    LowRankTensor<T>* lrt;
+    GenTensor<T>* lrt;
 
     // all ctors are private, only accessible by GenTensor
 
@@ -872,20 +908,20 @@ public:
     SliceLowRankTensor<T> () : lrt(0) {}
 
     /// ctor with a GenTensor; shallow
-    SliceLowRankTensor<T> (const LowRankTensor<T>& gt, const std::vector<Slice>& s)
-    		: lrt(const_cast<LowRankTensor<T>* > (&gt)) {
+    SliceLowRankTensor<T> (const GenTensor<T>& gt, const std::vector<Slice>& s)
+    		: lrt(const_cast<GenTensor<T>* > (&gt)) {
 //        : Tensor<T>(const_cast<Tensor<T>&>(t)) //!!!!!!!!!!!
     	for (int i=0; i<s.size(); ++i) thisslice[i]=s[i];
     }
 
     /// ctor with a GenTensor; shallow
-    SliceLowRankTensor<T> (const LowRankTensor<T>& gt, const std::array<Slice,TENSOR_MAXDIM>& s)
+    SliceLowRankTensor<T> (const GenTensor<T>& gt, const std::array<Slice,TENSOR_MAXDIM>& s)
     		: lrt(&gt), thisslice(s) {}
 
 public:
 
     /// assignment as in g(s) = g1;
-    SliceLowRankTensor<T>& operator=(const LowRankTensor<T>& rhs) {
+    SliceLowRankTensor<T>& operator=(const GenTensor<T>& rhs) {
         print("You don't want to assign to a SliceLowRankTensor; use operator+= instead");
         MADNESS_ASSERT(0);
         return *this;
@@ -899,7 +935,7 @@ public:
     };
 
     /// inplace addition as in g(s)+=g1
-    SliceLowRankTensor<T>& operator+=(const LowRankTensor<T>& rhs) {
+    SliceLowRankTensor<T>& operator+=(const GenTensor<T>& rhs) {
 		std::array<Slice,TENSOR_MAXDIM> rhs_slice;
 		rhs_slice.fill(_);
     	gaxpy(thisslice,rhs,rhs_slice,1.0);
@@ -907,7 +943,7 @@ public:
     }
 
     /// inplace subtraction as in g(s)-=g1
-    SliceLowRankTensor<T>& operator-=(const LowRankTensor<T>& rhs) {
+    SliceLowRankTensor<T>& operator-=(const GenTensor<T>& rhs) {
 		std::array<Slice,TENSOR_MAXDIM> rhs_slice;
 		rhs_slice.fill(_);
     	gaxpy(thisslice,rhs,rhs_slice,-1.0);
@@ -927,7 +963,7 @@ public:
     }
 
     /// *this = *this(s) + beta * rhs
-    void gaxpy(const std::array<Slice,TENSOR_MAXDIM>& lslice, const LowRankTensor<T>& rhs,
+    void gaxpy(const std::array<Slice,TENSOR_MAXDIM>& lslice, const GenTensor<T>& rhs,
     		const std::array<Slice,TENSOR_MAXDIM>& rslice, const double& beta) {
 
     	// fast return if possible
@@ -956,7 +992,7 @@ public:
 
         } else if (lrt->is_svd_tensor()) {
             MADNESS_ASSERT(lrt->get_svdtensor().has_structure());
-            LowRankTensor<T> tmp(*this);
+            GenTensor<T> tmp(*this);
             lrt->get_svdtensor().inplace_add(tmp.get_svdtensor(),thisslice,thisslice, 1.0, -1.0);
 
         } else if (lrt->is_tensortrain()) {
@@ -968,8 +1004,8 @@ public:
         return *this;
     }
 
-    friend LowRankTensor<T> copy(const SliceLowRankTensor<T>& other) {
-        LowRankTensor<T> result;
+    friend GenTensor<T> copy(const SliceLowRankTensor<T>& other) {
+        GenTensor<T> result;
         const std::array<Slice,TENSOR_MAXDIM> s=other.thisslice;
         if (other.lrt->is_full_tensor())
             result=Tensor<T>(copy(other.lrt->get_tensor()(s)));

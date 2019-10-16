@@ -41,6 +41,7 @@
 #include <madness/world/vector.h>
 #include <madness/world/worlddc.h>
 #include <madness/tensor/tensor.h>
+#include <madness/tensor/gentensor.h>
 #include <madness/mra/key.h>
 
 namespace madness {

@@ -1361,8 +1361,8 @@ namespace madness {
 
                 	// note that max_sigma is inclusive!
                     if (r_max>=0) {
-                        const GenTensor<resultT> chunk=input->get_svdtensor().get_configs(0,r_max);
-                        const GenTensor<resultT> chunk0=f0.get_svdtensor().get_configs(0,r_max);
+                        const GenTensor<resultT> chunk=SVDTensor<resultT>(input->get_svdtensor().get_configs(0,r_max));
+                        const GenTensor<resultT> chunk0=SVDTensor<resultT>(f0.get_svdtensor().get_configs(0,r_max));
 
                         double cpu0=cpu_time();
 
