@@ -167,13 +167,13 @@ public:
     /// deep assignment with slices: g0 = g1(s)
     GenTensor& operator=(const SliceLowRankTensor<T>& other) {
         const std::array<Slice,TENSOR_MAXDIM>& s=other.thisslice;
-        MADNESS_ASSERT(other.lrt->is_assigned());
-        if (other.lrt->is_full_tensor())
-            tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(other.lrt->get_tensor()(s))));
-        else if (other.lrt->is_svd_tensor())
-            tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(other.lrt->get_svdtensor().copy_slice(s)));
-        else if (other.lrt->is_tensortrain())
-            tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(copy(other.lrt->get_tensortrain(),s)));
+        MADNESS_ASSERT(other.is_assigned());
+        if (other.is_full_tensor())
+            tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(other.get_tensor()(s))));
+        else if (other.is_svd_tensor())
+            tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(other.get_svdtensor().copy_slice(s)));
+        else if (other.is_tensortrain())
+            tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(copy(other.get_tensortrain(),s)));
         else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -520,7 +520,7 @@ public:
     GenTensor& operator+=(const SliceLowRankTensor<T>& other) {
     	std::array<Slice,TENSOR_MAXDIM> s0;
     	s0.fill(_);
-        this->gaxpy(1.0,s0,*other.lrt,1.0,other.thisslice);
+        this->gaxpy(1.0,s0,other,1.0,other.thisslice);
         return *this;
     }
 
@@ -538,7 +538,7 @@ public:
     GenTensor& operator-=(const SliceLowRankTensor<T>& other) {
     	std::array<Slice,TENSOR_MAXDIM> s0;
     	s0.fill(_);
-        this->gaxpy(1.0,s0,*other.lrt,-1.0,other.thisslice);
+        this->gaxpy(1.0,s0,other,-1.0,other.thisslice);
         return *this;
     }
 
@@ -582,7 +582,7 @@ public:
     }
 
     void add_SVD(const GenTensor& other, const double& thresh) {
-        if (is_full_tensor()) get_tensor()+=get_tensor();
+        if (is_full_tensor()) get_tensor()+=other.get_tensor();
         else if (is_svd_tensor()) get_svdtensor().add_SVD(other.get_svdtensor(),thresh*facReduce());
         else if (is_tensortrain()) get_tensortrain()+=(other.get_tensortrain());
         else {
@@ -684,7 +684,6 @@ public:
 		return TensorArgs::what_am_i(tt);
 	};
 
-private:
 
     /// might return a NULL pointer!
     const BaseTensor* ptr() const {
@@ -692,6 +691,8 @@ private:
         std::visit([&p](auto& obj) {p=dynamic_cast<const BaseTensor*>(obj.get());}, tensor);
         return p;
     }
+
+private:
 
     /// holding the implementation of the low rank tensor representations
 //	std::variant<Tensor<T>, SVDTensor<T>, TensorTrain<T> > tensor;
@@ -895,28 +896,28 @@ operator*(const Q& x, const GenTensor<T>& t) {
 
 /// implements a temporary(!) slice of a LowRankTensor
 template<typename T>
-//class SliceLowRankTensor : public LowRankTensor<T> {
-class SliceLowRankTensor {
+class SliceLowRankTensor : public GenTensor<T> {
+//class SliceLowRankTensor {
 public:
 
     std::array<Slice,TENSOR_MAXDIM> thisslice;
-    GenTensor<T>* lrt;
+//    GenTensor<T>* lrt;
 
     // all ctors are private, only accessible by GenTensor
 
     /// default ctor
-    SliceLowRankTensor<T> () : lrt(0) {}
+    SliceLowRankTensor<T> () {}
 
     /// ctor with a GenTensor; shallow
     SliceLowRankTensor<T> (const GenTensor<T>& gt, const std::vector<Slice>& s)
-    		: lrt(const_cast<GenTensor<T>* > (&gt)) {
+    		: GenTensor<T>(const_cast<GenTensor<T>& > (gt)) {
 //        : Tensor<T>(const_cast<Tensor<T>&>(t)) //!!!!!!!!!!!
     	for (int i=0; i<s.size(); ++i) thisslice[i]=s[i];
     }
 
     /// ctor with a GenTensor; shallow
     SliceLowRankTensor<T> (const GenTensor<T>& gt, const std::array<Slice,TENSOR_MAXDIM>& s)
-    		: lrt(&gt), thisslice(s) {}
+    		: GenTensor<T>(&gt), thisslice(s) {}
 
 public:
 
@@ -952,13 +953,13 @@ public:
 
     /// inplace addition as in g(s)+=g1(s)
     SliceLowRankTensor<T>& operator+=(const SliceLowRankTensor<T>& rhs) {
-    	gaxpy(thisslice,*rhs.lrt,rhs.thisslice,1.0);
+    	gaxpy(thisslice,rhs,rhs.thisslice,1.0);
     	return *this;
     }
 
     /// inplace addition as in g(s)-=g1(s)
     SliceLowRankTensor<T>& operator-=(const SliceLowRankTensor<T>& rhs) {
-    	gaxpy(thisslice,*rhs.lrt,rhs.thisslice,-1.0);
+    	gaxpy(thisslice,rhs,rhs.thisslice,-1.0);
     	return *this;
     }
 
@@ -969,16 +970,16 @@ public:
     	// fast return if possible
         if (rhs.has_no_data() or rhs.rank()==0) return;
 
-        if (lrt->has_data()) MADNESS_ASSERT(is_same_tensor_type(*lrt,rhs));
+        if (this->has_data()) MADNESS_ASSERT(is_same_tensor_type(*this,rhs));
 
-        if (lrt->is_full_tensor()) {
-            lrt->get_tensor()(thisslice).gaxpy(1.0,rhs.get_tensor()(rslice),beta);
+        if (this->is_full_tensor()) {
+            this->get_tensor()(thisslice).gaxpy(1.0,rhs.get_tensor()(rslice),beta);
 
-        } else if (lrt->is_svd_tensor()) {
-        	lrt->get_svdtensor().inplace_add(rhs.get_svdtensor(),thisslice,rslice, 1.0, beta);
+        } else if (this->is_svd_tensor()) {
+        	this->get_svdtensor().inplace_add(rhs.get_svdtensor(),thisslice,rslice, 1.0, beta);
 
-        } else if (lrt->is_tensortrain()) {
-        	lrt->get_tensortrain().gaxpy(thisslice,rhs.get_tensortrain(),beta,rslice);
+        } else if (this->is_tensortrain()) {
+        	this->get_tensortrain().gaxpy(thisslice,rhs.get_tensortrain(),beta,rslice);
         }
         return ;
     }
@@ -987,16 +988,16 @@ public:
     SliceLowRankTensor<T>& operator=(const T& number) {
         MADNESS_ASSERT(number==T(0.0));
 
-        if (lrt->is_full_tensor()) {
-        	lrt->get_tensor()(thisslice)=0.0;
+        if (this->is_full_tensor()) {
+        	this->get_tensor()(thisslice)=0.0;
 
-        } else if (lrt->is_svd_tensor()) {
-            MADNESS_ASSERT(lrt->get_svdtensor().has_structure());
-            GenTensor<T> tmp(*this);
-            lrt->get_svdtensor().inplace_add(tmp.get_svdtensor(),thisslice,thisslice, 1.0, -1.0);
+        } else if (this->is_svd_tensor()) {
+            MADNESS_ASSERT(this->get_svdtensor().has_structure());
+            SliceLowRankTensor<T> tmp(*this);
+            this->get_svdtensor().inplace_add(tmp.get_svdtensor(),thisslice,thisslice, 1.0, -1.0);
 
-        } else if (lrt->is_tensortrain()) {
-        	lrt->get_tensortrain().gaxpy(thisslice,lrt->get_tensortrain(),-1.0,thisslice);
+        } else if (this->is_tensortrain()) {
+        	this->get_tensortrain().gaxpy(thisslice,this->get_tensortrain(),-1.0,thisslice);
         } else {
             MADNESS_EXCEPTION("you should not be here",1);
         }
@@ -1007,12 +1008,12 @@ public:
     friend GenTensor<T> copy(const SliceLowRankTensor<T>& other) {
         GenTensor<T> result;
         const std::array<Slice,TENSOR_MAXDIM> s=other.thisslice;
-        if (other.lrt->is_full_tensor())
-            result=Tensor<T>(copy(other.lrt->get_tensor()(s)));
-        else if (other.lrt->is_svd_tensor())
-            result=SVDTensor<T>(other.lrt->get_svdtensor().copy_slice(s));
-        else if (other.lrt->is_tensortrain())
-            result=TensorTrain<T>(copy(other.lrt->get_tensortrain(),s));
+        if (other.is_full_tensor())
+            result=Tensor<T>(copy(other.get_tensor()(s)));
+        else if (other.is_svd_tensor())
+            result=SVDTensor<T>(other.get_svdtensor().copy_slice(s));
+        else if (other.is_tensortrain())
+            result=TensorTrain<T>(copy(other.get_tensortrain(),s));
         else {
         }
         return result;
