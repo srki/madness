@@ -1290,6 +1290,10 @@ namespace madness {
 
 
     template
+    void svd(const Tensor<float>& a, Tensor<float>& U,
+             Tensor<Tensor<float>::scalar_type >& s, Tensor<float>& VT);
+
+    template
     void svd(const Tensor<double>& a, Tensor<double>& U,
              Tensor<Tensor<double>::scalar_type >& s, Tensor<double>& VT);
 
@@ -1337,6 +1341,10 @@ namespace madness {
 
     template
     void orgqr(Tensor<double>& A, const Tensor<double>& tau);
+
+    template
+    void svd(const Tensor<float_complex>& a, Tensor<float_complex>& U,
+             Tensor<Tensor<float_complex>::scalar_type >& s, Tensor<float_complex>& VT);
 
 
     template
