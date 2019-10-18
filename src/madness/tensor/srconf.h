@@ -67,7 +67,6 @@ namespace madness {
 	template <typename T>
 	class SRConf : public BaseTensor {
 		friend class GenTensor<T>;
-		friend class GenTensor<T>;
         friend class SliceLowRankTensor<T>;
 
 		/// the scalar type of T
@@ -730,8 +729,6 @@ protected:
 			return true;
 		}
 
-	private:
-
 		/// return the logicalrank
 		long rank() const {return weights_.size();};
 
@@ -760,14 +757,14 @@ protected:
 				}
             }
 
-			Tensor<T> result=inner(scr,flat_vector(1)(c0(1)),0,0);
+			Tensor<T> result=(inner(conj(scr),(flat_vector(1)(c0(1))),0,0));
             return result.reshape(ndim(),dims());
         }
 
-	private:
+	protected:
 		/// return the number of coefficients
 		unsigned int nCoeff() const {
-			return this->dim_eff()*this->kVec()*this->rank();
+			return this->kVec(0)*this->kVec(1)*this->rank();
 		};
 
 		/// return the real size of this
@@ -979,12 +976,13 @@ public:
 	/// @param[in,out]	weights weights
 	/// @param[in]		thresh	truncation threshold
 	template<typename T>
-	void ortho3(Tensor<T>& x, Tensor<T>& y, Tensor<double>& weights, const double& thresh) {
+	void ortho3(Tensor<T>& x, Tensor<T>& y, Tensor<typename Tensor<T>::scalar_type>& weights, const double& thresh) {
 
 #ifdef BENCH
 		double cpu0=wall_time();
 #endif
 		typedef Tensor<T> tensorT;
+		typedef typename Tensor<T>::scalar_type scalar_type;
 
 		const long rank=x.dim(0);
 		const double w_max=weights.absmax()*rank;		// max Frobenius norm
@@ -1003,7 +1001,7 @@ public:
 
 		// diagonalize
 		tensorT U1, U2;
-		Tensor<double> e1, e2;
+		Tensor<scalar_type> e1, e2;
 	    syev(S1,U1,e1);
 	    syev(S2,U2,e2);										// 2.3 / 4.0
 #ifdef BENCH
@@ -1011,8 +1009,8 @@ public:
 		SRConf<T>::time(3)+=cpu3-cpu1;
 #endif
 
-	    const double e1_max=e1.absmax();
-	    const double e2_max=e2.absmax();
+	    const scalar_type e1_max=e1.absmax();
+	    const scalar_type e2_max=e2.absmax();
 
 		// fast return if possible
 		if ((e1_max*w_max<thresh) or (e2_max*w_max<thresh)) {
@@ -1025,7 +1023,7 @@ public:
 	    // remove small negative eigenvalues
 	    e1.screen(1.e-13);
 	    e2.screen(1.e-13);
-	    Tensor<double> sqrt_e1(rank), sqrt_e2(rank);
+	    Tensor<scalar_type> sqrt_e1(rank), sqrt_e2(rank);
 
 
 	    // shrink U1, U2
@@ -1068,7 +1066,7 @@ public:
 
 	    // include X-
     	for (unsigned int r=0; r<rank1; r++) {
-    		double fac=1.0/sqrt_e1(r);
+    		scalar_type fac=1.0/sqrt_e1(r);
     		for (unsigned int t=0; t<rank; t++) {
 	    		U1(t,r)*=fac;
 //	    		if (sqrt_e1(r)<thresh) throw;
@@ -1076,7 +1074,7 @@ public:
     	}
 
 	   	for (unsigned int r=0; r<rank2; r++) {
-    		double fac=1.0/sqrt_e2(r);
+	   		scalar_type fac=1.0/sqrt_e2(r);
     		for (unsigned int t=0; t<rank; t++) {
 	    		U2(t,r)*=fac;
 //	    		if (sqrt_e2(r)<thresh) throw;
@@ -1089,7 +1087,7 @@ public:
 
 	    // decompose M
 		tensorT Up,VTp;
-		Tensor<double> Sp;
+		Tensor<scalar_type> Sp;
 		svd(M,Up,Sp,VTp);									// 1.5 / 3.0
 #ifdef BENCH
 		double cpu6=wall_time();
@@ -1154,8 +1152,8 @@ public:
 	/// @param[in]		x2	left subspace, will be accumulated onto x1
 	/// @param[in]		y2	right subspace, will be accumulated onto y1
 	template<typename T>
-	void ortho5(Tensor<T>& x1, Tensor<T>& y1, Tensor<double>& w1,
-				const Tensor<T>& x2, const Tensor<T>& y2, const Tensor<double>& w2,
+	void ortho5(Tensor<T>& x1, Tensor<T>& y1, Tensor<typename Tensor<T>::scalar_type>& w1,
+				const Tensor<T>& x2, const Tensor<T>& y2, const Tensor<typename Tensor<T>::scalar_type>& w2,
 				const double& thresh) {
 
 #ifdef BENCH

@@ -46,7 +46,10 @@ public:
 	SVDTensor() : SRConf<T>() {}
 
 	SVDTensor(const Tensor<T>& rhs, const double eps) {
-		if (rhs.has_data()) *this=computeSVD(rhs,eps);
+		if (rhs.has_data()) {
+//			*this=compute_svd(rhs,eps);
+			*this=compute_randomized_svd(rhs,eps);
+		}
 	}
 
 	SVDTensor(const SVDTensor<T>& rhs) = default;
@@ -68,47 +71,40 @@ public:
 	}
 
 	long size() const {
-		return this->nCoeff();
+		return SRConf<T>::nCoeff();
 	}
 
 	/// reduce the rank using SVD
-			SVDTensor computeSVD(const Tensor<T>& values, const double& eps, std::array<long,2> vectordim={0,0}) const {
+	SVDTensor compute_svd(const Tensor<T>& tensor,
+			const double& eps, std::array<long,2> vectordim={0,0}) const;
 
-				SVDTensor<T> result(values.ndim(),values.dims());
+	/// reduce the rank using SVD
+	SVDTensor compute_randomized_svd(const Tensor<T>& tensor,
+			const double& eps, std::array<long,2> vectordim={0,0}) const;
 
-				// fast return if possible
-				if (values.normf()<eps) return result;
+	/// compute the range of the matrix
+	static Tensor<T> compute_range(const Tensor<T>& matrix,
+			const double& eps, std::array<long,2> vectordim={0,0});
 
-				// SVD works only with matrices (2D)
-				if (vectordim[0]==0) {
-					long dim1=values.ndim()/2;	// integer division
-					vectordim[0]=vectordim[1]=1;
-					for (long i=0; i<dim1; ++i) vectordim[0]*=values.dim(i);
-					for (long i=dim1; i<values.ndim(); ++i) vectordim[1]*=values.dim(i);
-					MADNESS_ASSERT(vectordim[0]*vectordim[1]==values.size());
-				}
-				Tensor<T> values_eff=values.reshape(vectordim[0],vectordim[1]);
-				MADNESS_ASSERT(values_eff.ndim()==2);
+	static typename Tensor<T>::scalar_type check_range(const Tensor<T>& matrix,
+			const Tensor<T>& range) {
+		Tensor<T> residual=matrix-inner(range,inner(conj(range),matrix,0,0));
+		return residual.normf();
+	}
 
-				// output from svd
-		Tensor<T> U;
-		Tensor<T> VT;
-		Tensor< typename Tensor<T>::scalar_type > s;
+	/// following Alg. 5.1 of HMT 2011
+	static SVDTensor<T> compute_svd_from_range(const Tensor<T>& range,
+			const Tensor<T>& matrix);
 
-		svd(values_eff,U,s,VT);
-
-		// find the maximal singular value that's supposed to contribute
-		// singular values are ordered (largest first)
-		const double thresh=eps;
-		long i=SRConf<T>::max_sigma(thresh,s.dim(0),s);
-
-		// convert SVD output to our convention
-		if (i>=0) {
-			// copy to have contiguous and tailored singular vectors
-			result.set_vectors_and_weights(copy(s(Slice(0,i))), copy(transpose(U(_,Slice(0,i)))),
-					copy(VT(Slice(0,i),_)));
+	static Tensor<T> make_SVD_decaying_matrix(const Tensor<T>& matrix, const int n=1) {
+		Tensor<T> U,VT;
+		Tensor<typename Tensor<T>::scalar_type> s;
+		svd(matrix,U,s,VT);
+		for (long i=0; i<s.size(); ++i) {
+			s(i)*=exp(-i/n);		// make singular values decay exponentially
+			U(_,i)*=s(i);
 		}
-		return result;
+		return inner(U,VT);
 	}
 
 	SVDTensor<T>& emul(const SVDTensor<T>& other) {
@@ -122,6 +118,24 @@ public:
 		this->append(rhs,beta);
 		return *this;
 	}
+
+private:
+
+	/// resize Tensor to a matrix
+	static Tensor<T> resize_to_matrix(const Tensor<T>& matrix, std::array<long,2> vectordim={0,0}) {
+		// SVD works only with matrices (2D)
+		if (vectordim[0]==0) {
+			long dim1=matrix.ndim()/2;	// integer division
+			vectordim[0]=vectordim[1]=1;
+			for (long i=0; i<dim1; ++i) vectordim[0]*=matrix.dim(i);
+			for (long i=dim1; i<matrix.ndim(); ++i) vectordim[1]*=matrix.dim(i);
+			MADNESS_ASSERT(vectordim[0]*vectordim[1]==matrix.size());
+		}
+		Tensor<T> values_eff=matrix.reshape(vectordim[0],vectordim[1]);
+		MADNESS_ASSERT(values_eff.ndim()==2);
+		return values_eff;
+	}
+
 public:
 
 	template <typename R, typename Q>

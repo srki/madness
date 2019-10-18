@@ -10,7 +10,6 @@
 #endif
 
 #include <madness/tensor/gentensor.h>
-#include <madness/tensor/lowranktensor.h>
 
 
 using namespace madness;
@@ -307,11 +306,73 @@ int test_general_transform() {
 	return 0;
 }
 
+
+template<typename T>
+int test_stuff() {
+	double thresh=1.e-5;
+	long k=10;
+	Tensor<T> matrix(std::pow(k,3l),std::pow(k,3l));
+
+	print("k, thresh",k,thresh);
+	matrix.fillindex();
+	matrix=matrix*(T(1.0)/matrix.normf());
+
+	printf("%15s %12s %12s %12s\n","method","range","error ratio","time");
+
+	Tensor<T> Q=SVDTensor<T>::compute_range(matrix,thresh);
+	double error=SVDTensor<T>::check_range(matrix,Q);
+//	printf("dim(range), error ratio %d %12.8f\n",Q.dim(1),error/thresh);
+
+	double wall0=wall_time();
+	matrix.fillrandom();
+	matrix=SVDTensor<T>::make_SVD_decaying_matrix(matrix,100);
+	matrix=matrix*(T(1.0)/matrix.normf());
+	double wall1=wall_time();
+//	printf("wall  %12.8f\n",wall1-wall0);
+
+
+	wall0=wall_time();
+	Q=SVDTensor<T>::compute_range(matrix,thresh*0.1);
+	wall1=wall_time();
+	error=SVDTensor<T>::check_range(matrix,Q);
+	printf("%15s %12d %12.4f %12.8f\n","compute_range",Q.dim(1),error/thresh,wall1-wall0);
+
+	wall0=wall_time();
+	SVDTensor<T> st=SVDTensor<T>::compute_svd_from_range(Q,matrix.reshape(k,k,k,k,k,k));
+	wall1=wall_time();
+	error=(st.reconstruct().flat()-matrix.flat()).normf();
+	printf("%15s %12d %12.4f %12.8f\n","svd from range",Q.dim(1),error/thresh,wall1-wall0);
+
+	wall0=wall_time();
+	SVDTensor<T> st1(matrix,thresh);
+	wall1=wall_time();
+	error=(st1.reconstruct().flat()-matrix.flat()).normf();
+	printf("%15s %12d %12.4f %12.8f\n","svdtensor",st1.rank(),error/thresh,wall1-wall0);
+
+	wall0=wall_time();
+	TensorTrain<T> tt(matrix.reshape(k,k,k,k,k,k),thresh);
+	wall1=wall_time();
+	auto ranks=tt.ranks();
+	long ttrank=*std::max_element(ranks.begin(),ranks.end());
+	double tt_error=(matrix.flat()-tt.reconstruct(true)).normf();
+	printf("%15s %12d %12.4f %12.8f\n","TT",Q.dim(1),tt_error/thresh,wall1-wall0);
+
+	wall0=wall_time();
+	Tensor<T> U,VT;
+	Tensor<typename Tensor<T>::scalar_type> s;
+	svd(matrix,U,s,VT);
+	int rank=SRConf<T>::max_sigma(thresh, s.size(), s);
+	wall1=wall_time();
+	printf("%15s %12d %12.4f %12.8f\n","svd",rank,0.0,wall1-wall0);
+	return 0;
+}
+
 int
 main(int argc, char* argv[]) {
 
 	madness::default_random_generator.setstate(int(cpu_time())%4149);
 	int success=0;
+	success+=test_stuff<double>();
 #if 0
     success += test_constructor<double>();
     success += test_constructor<double_complex>();

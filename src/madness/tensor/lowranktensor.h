@@ -106,11 +106,11 @@ public:
 			if (rhs.size()==0) {
 				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
 			} else {
-				TensorTrain<T> tt(rhs,targs.thresh*facReduce());
-				GenTensor<T> tmp=tt;
-				*this=tmp.convert(targs);
+//				TensorTrain<T> tt(rhs,targs.thresh*facReduce());
+//				GenTensor<T> tmp=tt;
+//				*this=tmp.convert(targs);
+				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
 			}
-			//        	tensor=SVDTensor<T>(rhs,targs.thresh*facReduce());
 		}
 		else if (targs.tt==TT_TENSORTRAIN) {
 			tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(rhs,targs.thresh*facReduce()));

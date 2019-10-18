@@ -203,6 +203,54 @@ void pstrf_(const char * UPLO,integer *n, complex_real8 *a ,integer* lda, intege
 #endif
 }
 
+/// These oddly-named wrappers enable the generic geqrf iterface to get
+/// the correct LAPACK routine based upon the argument type.  Internal
+/// use only.
+STATIC inline
+void dgeqrf_(integer *m, integer *n,
+   	 real4 *a, integer *lda, real4 *tau,
+   	 real4 *work, integer *lwork, integer *infoOUT) {
+#if MADNESS_LINALG_USE_LAPACKE
+	sgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+#else
+	sgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
+#endif
+}
+
+//STATIC inline
+//void dgeqrf_(integer *m, integer *n,
+//   	 real8 *a, integer *lda, real8 *tau,
+//   	 real8 *work, integer *lwork, integer *infoOUT) {
+//#if MADNESS_LINALG_USE_LAPACKE
+//	dgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+//#else
+//	dgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
+//#endif
+//}
+
+STATIC inline
+void dgeqrf_(integer *m, integer *n,
+		float_complex *a, integer *lda, float_complex *tau,
+		float_complex *work, integer *lwork, integer *infoOUT) {
+#if MADNESS_LINALG_USE_LAPACKE
+	cgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+#else
+	cgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
+#endif
+}
+
+STATIC inline
+void dgeqrf_(integer *m, integer *n,
+		double_complex *a, integer *lda, double_complex *tau,
+		double_complex *work, integer *lwork, integer *infoOUT) {
+#if MADNESS_LINALG_USE_LAPACKE
+	zgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+#else
+	zgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
+#endif
+}
+
+
 
 /// These oddly-named wrappers enable the generic gesv iterface to get
 /// the correct LAPACK routine based upon the argument type.  Internal
@@ -1256,7 +1304,10 @@ namespace madness {
             cout << endl;
 
             cout << endl;
+            cout << "error in float QR/LQ " << test_qr<float>() << endl;
             cout << "error in double QR/LQ " << test_qr<double>() << endl;
+            cout << "error in float_complex QR/LQ " << test_qr<float_complex>() << endl;
+            cout << "error in double_complex QR/LQ " << test_qr<double_complex>() << endl;
             cout << endl;
 
             cout << "error in double inverse " << test_inverse<double>(32) << endl;
@@ -1322,7 +1373,18 @@ namespace madness {
     Tensor<double> inverse(const Tensor<double>& A);
 
     template
+    void qr(Tensor<float>& A, Tensor<float>& R);
+
+    template
     void qr(Tensor<double>& A, Tensor<double>& R);
+
+    template
+    void qr(Tensor<float_complex>& A, Tensor<float_complex>& R);
+
+    template
+    void qr(Tensor<double_complex>& A, Tensor<double_complex>& R);
+
+
 
     template
     void lq(Tensor<double>& A, Tensor<double>& L);
