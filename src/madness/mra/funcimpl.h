@@ -888,6 +888,7 @@ namespace madness {
 
     public:
         Timer timer_accumulate;
+        Timer timer_change_tensor_type;
         Timer timer_lr_result;
         Timer timer_filter;
         Timer timer_compress_svd;
@@ -1145,6 +1146,7 @@ namespace madness {
         TensorType get_tensor_type() const;
 
         TensorArgs get_tensor_args() const;
+        void set_tensor_args(const TensorArgs& t);
 
         double get_thresh() const;
 
@@ -2408,16 +2410,22 @@ namespace madness {
 
             // threshold for rank reduction / SVD truncation
             TensorArgs targs;
+            implT* f;
 
             // constructor takes target precision
             do_change_tensor_type() {}
-            do_change_tensor_type(const TensorArgs& targs) : targs(targs) {}
+//            do_change_tensor_type(const TensorArgs& targs) : targs(targs) {}
+            do_change_tensor_type(const TensorArgs& targs, implT& g) : targs(targs), f(&g) {}
 
             //
             bool operator()(typename rangeT::iterator& it) const {
 
+            	double cpu0=cpu_time();
                 nodeT& node = it->second;
                 change_tensor_type(node.coeff(),targs);
+            	double cpu1=cpu_time();
+                f->timer_change_tensor_type.accumulate(cpu1-cpu0);
+
                 return true;
 
             }

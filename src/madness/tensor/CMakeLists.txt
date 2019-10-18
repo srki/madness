@@ -32,7 +32,7 @@ set(MADCLAPACK_HEADERS cblas.h clapack.h clapack_fortran.h)  # this part of MADl
 
 # Source lists for MADlinalg
 set(MADLINALG_HEADERS ${MADCLAPACK_HEADERS} tensor_lapack.h solvers.h elem.h)
-set(MADLINALG_SOURCES lapack.cc solvers.cc elem.cc SVDTensor.cc)
+set(MADLINALG_SOURCES lapack.cc solvers.cc elem.cc SVDTensor.cc RandomizedMatrixDecomposition)
 
 # Create libraries MADtensor and MADlinalg
 add_mad_library(tensor MADTENSOR_SOURCES MADTENSOR_HEADERS "misc" "madness/tensor")

@@ -182,10 +182,20 @@ namespace madness {
             madness::print("timing of ",line);
             typedef ConcurrentHashMap<int,double>::const_accessor accessor;
             accessor acc;
-            for (int ilog=-10; ilog<4; ++ilog) {
-                const bool found=data.find(acc, ilog);
-                if (found) madness::print("  time spent in log(10) ", acc->first, acc->second);
-            }
+            bool found=data.find(acc, -10);
+            if (found) madness::print("  time spent in total ", acc->second);
+
+            found=data.find(acc, -1);
+            if (found) madness::print("  # tasks in <0.1s    ", acc->second);
+            found=data.find(acc, 0);
+            if (found) madness::print("  # tasks in <1s      ", acc->second);
+            found=data.find(acc, 1);
+            if (found) madness::print("  # tasks in <10s     ", acc->second);
+            found=data.find(acc, 2);
+            if (found) madness::print("  # tasks in <100s    ", acc->second);
+            found=data.find(acc, 3);
+            if (found) madness::print("  # tasks in <1000s   ", acc->second);
+
         }
     };
 

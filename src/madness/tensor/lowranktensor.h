@@ -45,6 +45,8 @@
 #include <madness/tensor/tensor.h>
 #include <madness/tensor/tensortrain.h>
 #include "type_data.h"
+#include <madness/tensor/RandomizedMatrixDecomposition.h>
+
 
 namespace madness {
 
@@ -101,15 +103,29 @@ public:
 
 	/// ctor with a regular Tensor and arguments, deep
 	GenTensor(const Tensor<T>& rhs, const TensorArgs& targs) {
-		if (targs.tt==TT_FULL) tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(rhs)));
+//		if (targs.tt==TT_FULL) tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(rhs)));
+		if (targs.tt==TT_FULL) *this=copy(rhs);
 		else if (targs.tt==TT_2D) {
 			if (rhs.size()==0) {
 				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
 			} else {
-//				TensorTrain<T> tt(rhs,targs.thresh*facReduce());
-//				GenTensor<T> tmp=tt;
-//				*this=tmp.convert(targs);
-				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
+
+				long maxrank=std::max(50.0,floor(0.3*sqrt(rhs.size())));
+				RandomizedMatrixDecomposition<T> rmd=RMDFactory().maxrank(maxrank);
+				Tensor<T> Q=rmd.compute_range(rhs,targs.thresh*facReduce()*0.1,{0,0});
+				if (Q.size()==0) {
+					*this=SVDTensor<T>(rhs.ndim(),rhs.dims());
+				} else if (not rmd.exceeds_maxrank()) {
+					SVDTensor<T> result(rhs.ndim(),rhs.dims());
+					result=SVDTensor<T>::compute_svd_from_range(Q,rhs);
+					*this=result;
+				} else {
+//					*this=copy(rhs);
+					TensorTrain<T> tt(rhs,targs.thresh*facReduce());
+					GenTensor<T> tmp=tt;
+					*this=tmp.convert(targs);
+				}
+//				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
 			}
 		}
 		else if (targs.tt==TT_TENSORTRAIN) {
@@ -303,6 +319,7 @@ public:
 	GenTensor& convert_inplace(const TensorArgs& targs) {
 
 		// fast return
+		if (not is_assigned()) return *this;
 		if (is_of_tensortype(targs.tt)) return *this;
 
 		// target is full tensor

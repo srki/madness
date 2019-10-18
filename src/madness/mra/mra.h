@@ -1408,6 +1408,8 @@ namespace madness {
         void change_tensor_type(const TensorArgs& targs, bool fence=true) {
             if (not impl) return;
             impl->change_tensor_type1(targs,fence);
+            impl->timer_change_tensor_type.print("change_tensor_type");
+
         }
 
 

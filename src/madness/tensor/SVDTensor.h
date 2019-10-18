@@ -75,37 +75,18 @@ public:
 	}
 
 	/// reduce the rank using SVD
-	SVDTensor compute_svd(const Tensor<T>& tensor,
-			const double& eps, std::array<long,2> vectordim={0,0}) const;
-
-	/// reduce the rank using SVD
-	SVDTensor compute_randomized_svd(const Tensor<T>& tensor,
-			const double& eps, std::array<long,2> vectordim={0,0}) const;
-
-	/// compute the range of the matrix
-	static Tensor<T> compute_range(const Tensor<T>& matrix,
+	static SVDTensor compute_svd(const Tensor<T>& tensor,
 			const double& eps, std::array<long,2> vectordim={0,0});
 
-	static typename Tensor<T>::scalar_type check_range(const Tensor<T>& matrix,
-			const Tensor<T>& range) {
-		Tensor<T> residual=matrix-inner(range,inner(conj(range),matrix,0,0));
-		return residual.normf();
-	}
+	/// reduce the rank using SVD
+	static SVDTensor compute_randomized_svd(const Tensor<T>& tensor,
+			const double& eps, std::array<long,2> vectordim={0,0});
+
+	/// compute an SVD from a given matrix and its range
 
 	/// following Alg. 5.1 of HMT 2011
-	static SVDTensor<T> compute_svd_from_range(const Tensor<T>& range,
-			const Tensor<T>& matrix);
+	static SVDTensor compute_svd_from_range(const Tensor<T>& range, const Tensor<T>& matrix);
 
-	static Tensor<T> make_SVD_decaying_matrix(const Tensor<T>& matrix, const int n=1) {
-		Tensor<T> U,VT;
-		Tensor<typename Tensor<T>::scalar_type> s;
-		svd(matrix,U,s,VT);
-		for (long i=0; i<s.size(); ++i) {
-			s(i)*=exp(-i/n);		// make singular values decay exponentially
-			U(_,i)*=s(i);
-		}
-		return inner(U,VT);
-	}
 
 	SVDTensor<T>& emul(const SVDTensor<T>& other) {
 		const SRConf<T>& base=other;
@@ -120,21 +101,6 @@ public:
 	}
 
 private:
-
-	/// resize Tensor to a matrix
-	static Tensor<T> resize_to_matrix(const Tensor<T>& matrix, std::array<long,2> vectordim={0,0}) {
-		// SVD works only with matrices (2D)
-		if (vectordim[0]==0) {
-			long dim1=matrix.ndim()/2;	// integer division
-			vectordim[0]=vectordim[1]=1;
-			for (long i=0; i<dim1; ++i) vectordim[0]*=matrix.dim(i);
-			for (long i=dim1; i<matrix.ndim(); ++i) vectordim[1]*=matrix.dim(i);
-			MADNESS_ASSERT(vectordim[0]*vectordim[1]==matrix.size());
-		}
-		Tensor<T> values_eff=matrix.reshape(vectordim[0],vectordim[1]);
-		MADNESS_ASSERT(values_eff.ndim()==2);
-		return values_eff;
-	}
 
 public:
 

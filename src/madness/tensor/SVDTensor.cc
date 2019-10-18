@@ -35,22 +35,24 @@
 
 #include <madness/tensor/SVDTensor.h>
 #include <madness/constants.h>
+#include <madness/tensor/RandomizedMatrixDecomposition.h>
 
 using namespace madness;
 
 namespace madness {
 
+
 /// reduce the rank using SVD
 template<typename T>
 SVDTensor<T> SVDTensor<T>::compute_svd(const Tensor<T>& values,
-		const double& eps, std::array<long,2> vectordim) const {
+		const double& eps, std::array<long,2> vectordim) {
 
 	SVDTensor<T> result(values.ndim(),values.dims());
 
 	// fast return if possible
 	if (values.normf()<eps) return result;
 
-	Tensor<T> values_eff=resize_to_matrix(values,vectordim);
+	Tensor<T> values_eff=RandomizedMatrixDecomposition<T>::resize_to_matrix(values,vectordim);
 
 	// output from svd
 	Tensor<T> U;
@@ -77,92 +79,42 @@ SVDTensor<T> SVDTensor<T>::compute_svd(const Tensor<T>& values,
 /// reduce the rank using SVD
 template<typename T>
 SVDTensor<T> SVDTensor<T>::compute_randomized_svd(const Tensor<T>& tensor,
-		const double& eps, std::array<long,2> vectordim) const {
+		const double& eps, std::array<long,2> vectordim) {
 
-	Tensor<T> Q=SVDTensor<T>::compute_range(tensor,eps*0.1,vectordim);
-	if (Q.size()==0) return SVDTensor<T>(tensor.ndim(),tensor.dims());
-	SVDTensor<T> result=SVDTensor<T>::compute_svd_from_range(Q,tensor);
+	// 1/8 is 0.125, so 0.2 should be good for all tensors other than the full rank ones
+	long maxrank=std::max(125.0,floor(0.2*sqrt(tensor.size())));
+
+	double wall0=wall_time();
+	RandomizedMatrixDecomposition<T> rmd=RMDFactory().maxrank(maxrank);
+	Tensor<T> Q=rmd.compute_range(tensor,eps*0.1,vectordim);
+	double wall1=wall_time();
+	double attempt=wall1-wall0;
+	SVDTensor<T> result(tensor.ndim(),tensor.dims());
+	if (rmd.exceeds_maxrank()) {
+		// fallback option
+		wall0=wall_time();
+		result=compute_svd(tensor,eps,vectordim);
+		wall1=wall_time();
+		print("fall back into full SVD: rank, maxrank",Q.dim(1),maxrank, attempt, wall1-wall0);
+	} else if (Q.size()>0) {
+		result=compute_svd_from_range(Q,tensor);
+	} else {
+		MADNESS_ASSERT(Q.size()==0);
+	}
+
 	// TODO: fixme
 //	result.orthonormalize(eps);
 	return result;
 
 }
 
-/// compute the range of the matrix, following Alg 4.2 of Halko, Martinsson, Tropp, 2011
 template<typename T>
-Tensor<T> SVDTensor<T>::compute_range(const Tensor<T>& tensor,
-		const double& eps, std::array<long,2> vectordim) {
-
-	typedef typename Tensor<T>::scalar_type scalar_type;
-
-	// fast return if possible
-	Tensor<T> result;
-	if (tensor.normf()<eps) return result;
-
-	// random parameters
-	const long oversampling=10;
-
-	const Tensor<T> matrix=resize_to_matrix(tensor,vectordim);
-	const long m=matrix.dim(0);
-	const long n=matrix.dim(1);
-
-	// random trial vectors (transpose for efficiency)
-	Tensor<T> omegaT(oversampling,n);
-	omegaT.fillrandom();
-
-	// compute guess for the range
-	Tensor<T> Y=inner(matrix,omegaT,1,1);
-
-	std::vector<scalar_type> columnnorm(Y.dim(0));
-	for (long i=0; i<Y.dim(0); ++i) columnnorm[i]=Y(i,_).normf();
-	scalar_type maxnorm=*std::max_element(columnnorm.begin(),columnnorm.end());
-
-	bool not_complete=(maxnorm>(eps/10*sqrt(2* madness::constants::pi)));
-
-	Tensor<T> Q,R;	// R is not needed anymore..
-	if (not_complete) {
-		qr(Y,R);
-		Q=Y;
-	} else {
-		return result;
-	}
-
-	while (not_complete) {
-		omegaT.fillrandom();
-		Y=inner(matrix,omegaT,1,1);
-		Tensor<T> Y0=Y-inner(Q,inner(conj(Q),Y,0,0));
-
-		// check residual norm, exit if converged
-		std::vector<scalar_type> columnnorm0(Y0.dim(0));
-		for (long i=0; i<Y0.dim(0); ++i) columnnorm0[i]=Y0(i,_).normf();
-		maxnorm=*std::max_element(columnnorm0.begin(),columnnorm0.end());
-		if (maxnorm<(eps/10*sqrt(2*constants::pi))) break;
-
-
-		// concatenate the ranges
-		Tensor<T> Q0(m,Q.dim(1)+Y.dim(1));
-		Q0(_,Slice(0,Q.dim(1)-1))=Q;
-		Q0(_,Slice(Q.dim(1),-1))=Y0;
-
-		// orthonormalize the ranges
-		qr(Q0,R);
-		Q=Q0;
-
-		if (Q.dim(1)==matrix.dim(0)) break;
-		if (Q.dim(1)>matrix.dim(0)) MADNESS_EXCEPTION("faulty QR step in randomized range finder",1);;
-
-	}
-	return Q;
-}
-
-template<typename T>
-SVDTensor<T> SVDTensor<T>::compute_svd_from_range(const Tensor<T>& Q,
-		const Tensor<T>& tensor) {
+SVDTensor<T> SVDTensor<T>::compute_svd_from_range(const Tensor<T>& Q, const Tensor<T>& tensor) {
 	typedef typename Tensor<T>::scalar_type scalar_type;
 
 	MADNESS_ASSERT(tensor.size()%Q.dim(0) == 0);
 	std::array<long,2> vectordim={Q.dim(0),tensor.size()/Q.dim(0)};
-	const Tensor<T> matrix=resize_to_matrix(tensor,vectordim);
+	const Tensor<T> matrix=RandomizedMatrixDecomposition<T>::resize_to_matrix(tensor,vectordim);
 
 	Tensor<T> B=inner(conj(Q),matrix,0,0);
 	Tensor<T> U,VT;
@@ -173,6 +125,7 @@ SVDTensor<T> SVDTensor<T>::compute_svd_from_range(const Tensor<T>& Q,
 	result.set_vectors_and_weights(s,U,VT);
 	return result;
 }
+
 
 
 // explicit instantiation

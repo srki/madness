@@ -284,6 +284,9 @@ namespace madness {
     TensorArgs FunctionImpl<T,NDIM>::get_tensor_args() const {return targs;}
 
     template <typename T, std::size_t NDIM>
+    void FunctionImpl<T,NDIM>::set_tensor_args(const TensorArgs& t) {targs=t;}
+
+    template <typename T, std::size_t NDIM>
     double FunctionImpl<T,NDIM>::get_thresh() const {return thresh;}
 
     template <typename T, std::size_t NDIM>
@@ -1181,7 +1184,7 @@ namespace madness {
     /// @param[in]  targs   target tensor arguments (threshold and full/low rank)
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::change_tensor_type1(const TensorArgs& targs, bool fence) {
-        flo_unary_op_node_inplace(do_change_tensor_type(targs),fence);
+        flo_unary_op_node_inplace(do_change_tensor_type(targs,*this),fence);
     }
 
     /// reduce the rank of the coefficients tensors
@@ -1693,7 +1696,7 @@ namespace madness {
         targs2.thresh*=0.1;
 
         // need the deep copy for contiguity
-        coeffT ss=coeffT(copy(d(cdata.s0)),targs2);
+        coeffT ss=coeffT(copy(d(cdata.s0)));
 
         if (key.level()> 0 && !nonstandard)
             d(cdata.s0) = 0.0;
@@ -1757,7 +1760,7 @@ namespace madness {
         flo_unary_op_node_inplace(do_reduce_rank(targs),true);
 
         // change TT_FULL to low rank
-        flo_unary_op_node_inplace(do_change_tensor_type(targs),true);
+        flo_unary_op_node_inplace(do_change_tensor_type(targs,*this),true);
 
         // truncate leaf nodes to avoid excessive tree refinement
         flo_unary_op_node_inplace(do_truncate_NS_leafs(this),true);

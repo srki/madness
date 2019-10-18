@@ -137,30 +137,27 @@ void draw_circle(World& world, Function<double,NDIM>& pair, const std::string re
 
 void dostuff(World& world) {
 
-	Tensor<double> r(5,5);
-	r.fillrandom();
-
-	Tensor<double> rr=r;
-	r+=1.0;
-
-	print("r.normf()",r.normf());
-	print("rr.normf()",rr.normf());
-
-	Tensor<double> rrr=r;
-	r=r+1.0;
-
-	print("r.normf()",r.normf());
-	print("rrr.normf()",rrr.normf());
-
-	double thresh=1.e-3;
 	real_function_6d Uphi0=real_factory_6d(world);
 	load_function(world,Uphi0,"result_before_reconstruction");
-//    FunctionDefaults<6>::set_tensor_type(TT_FULL);
-//    Uphi0.change_tensor_type(TensorArgs(thresh,TT_FULL));
+    FunctionDefaults<6>::set_tensor_type(TT_FULL);
+	Uphi0.get_impl()->set_tensor_args(TensorArgs(TT_FULL,1.e-3));
+    Uphi0.change_tensor_type(TensorArgs(TT_FULL,1.e-3));
+
 
 	Uphi0.print_size("result before reconstruction");
 	Uphi0.reconstruct();
 	Uphi0.print_size("result after reconstruction");
+	Uphi0.compress();
+	Uphi0.print_size("result after compression");
+	Uphi0.get_impl()->timer_filter.print("filter");
+	Uphi0.get_impl()->timer_compress_svd.print("compress_svd");
+
+    FunctionDefaults<6>::set_tensor_type(TT_2D);
+	Uphi0.get_impl()->set_tensor_args(TensorArgs(TT_2D,1.e-3));
+	Uphi0.change_tensor_type(TensorArgs(TT_2D,1.e-3));
+	Uphi0.print_size("result in TT_2D");
+	Uphi0.get_impl()->print_stats();
+
 	throw;
 
 }
@@ -191,8 +188,8 @@ int main(int argc, char** argv) {
     if (L<0.0) MADNESS_EXCEPTION("box size indetermined",1);
     FunctionDefaults<3>::set_cubic_cell(-L,L);
     FunctionDefaults<6>::set_cubic_cell(-L,L);
-//    FunctionDefaults<6>::set_tensor_type(TT_2D);
-    FunctionDefaults<6>::set_tensor_type(TT_FULL);
+    FunctionDefaults<6>::set_tensor_type(TT_2D);
+//    FunctionDefaults<6>::set_tensor_type(TT_FULL);
 
 
     if (world.rank()==0) {
@@ -214,11 +211,11 @@ int main(int argc, char** argv) {
             filenames.push_back(stringify(val));
         }
     }
-
+    FunctionDefaults<6>::set_thresh(1.e-3);
 	// make sure we're doing what we want to do
 	if (world.rank()==0) {
 		print("polynomial order:  ", FunctionDefaults<6>::get_k());
-		print("threshold:         ", FunctionDefaults<6>::get_thresh());
+		print("threshold (6D):    ", FunctionDefaults<6>::get_thresh());
 		print("cell size:         ", FunctionDefaults<6>::get_cell()(0,1) - FunctionDefaults<6>::get_cell()(0,0));
 		print("truncation mode:   ", FunctionDefaults<6>::get_truncate_mode());
 		print("tensor type:       ", FunctionDefaults<6>::get_tensor_type());
