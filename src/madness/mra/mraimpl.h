@@ -1900,7 +1900,7 @@ namespace madness {
 
         if (this->world.rank()==0) {
             printf("%40s at time %.1fs: norm/tree/real/size: %7.5f %zu, %6.3f, %6.3f GByte\n",
-                   (name.c_str()), wall, norm, tsize,double(rsize)/fac,double(size)/fac*d);
+                   (name.c_str()), wall, norm, tsize,double(rsize)/fac*d,double(size)/fac*d);
         }
     }
 

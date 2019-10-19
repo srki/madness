@@ -120,10 +120,10 @@ public:
 					result=SVDTensor<T>::compute_svd_from_range(Q,rhs);
 					*this=result;
 				} else {
-//					*this=copy(rhs);
-					TensorTrain<T> tt(rhs,targs.thresh*facReduce());
-					GenTensor<T> tmp=tt;
-					*this=tmp.convert(targs);
+					*this=copy(rhs);
+//					TensorTrain<T> tt(rhs,targs.thresh*facReduce());
+//					GenTensor<T> tmp=tt;
+//					*this=tmp.convert(targs);
 				}
 //				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
 			}
