@@ -434,8 +434,10 @@ namespace madness {
 			if (check_orthonormality) check_right_orthonormality();
             if (check_orthonormality) rhs.check_right_orthonormality();
 
-            Tensor<T> x1=flat_vector(0);
-            Tensor<T> x2=flat_vector(1);
+//            Tensor<T> x1=flat_vector(0);
+//            Tensor<T> x2=flat_vector(1);
+            Tensor<T> x1=vector_[0].reshape(rank(),kVec(0));
+            Tensor<T> x2=vector_[1].reshape(rank(),kVec(1));
             ortho5(x1,x2,weights_,
 					rhs.flat_vector(0),rhs.flat_vector(1),rhs.weights_,thresh);
             std::swap(x1,vector_[0]);
@@ -619,14 +621,16 @@ protected:
 		/// return shallow copy of a slice of one of the vectors, flattened to (r,kVec)
 		const Tensor<T> flat_vector(const unsigned int& idim) const {
 		    MADNESS_ASSERT(rank()>0);
-		    const Tensor<T> result=vector_[idim](c0(idim)).reshape(rank(),kVec(idim));
+//		    const Tensor<T> result=vector_[idim](c0(idim)).reshape(rank(),kVec(idim));
+		    const Tensor<T> result=vector_[idim].reshape(rank(),kVec(idim));
 		    return result;
 		}
 
 		/// return shallow copy of a slice of one of the vectors, flattened to (r,kVec)
 		Tensor<T> flat_vector(const unsigned int& idim) {
 		    MADNESS_ASSERT(rank()>0);
-		    Tensor<T> result=vector_[idim](c0(idim)).reshape(rank(),kVec(idim));
+//		    Tensor<T> result=vector_[idim](c0(idim)).reshape(rank(),kVec(idim));
+		    Tensor<T> result=vector_[idim].reshape(rank(),kVec(idim));
 		    return result;
 		}
 
@@ -764,7 +768,7 @@ protected:
 	protected:
 		/// return the number of coefficients
 		unsigned int nCoeff() const {
-			return this->kVec(0)*this->kVec(1)*this->rank();
+			return vector_[0].size()+vector_[1].size()+weights_.size();
 		};
 
 		/// return the real size of this

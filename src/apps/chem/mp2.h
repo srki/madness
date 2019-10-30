@@ -406,6 +406,10 @@ namespace madness {
         		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");
         		return std::count(v.begin(), v.end(), "uphi0");
         	}
+        	bool read_KffKphi0() const {
+        		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");
+        		return std::count(v.begin(), v.end(), "kffkphi0");
+        	}
 
         	bool read_r12nemo() const {
         		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");

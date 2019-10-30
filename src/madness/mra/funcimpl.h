@@ -3217,20 +3217,28 @@ namespace madness {
                 g.get_impl()->tnorm(gcoeff.full_tensor(), &glo, &ghi);
 
                 // this assumes intimate knowledge of how a GenTensor is organized!
-                MADNESS_ASSERT(fcoeff.is_svd_tensor());
-                const long rank=fcoeff.rank();
-                const long maxk=fcoeff.dim(0);
-                tensorT vec=fcoeff.get_svdtensor().ref_vector(particle-1).reshape(rank,maxk,maxk,maxk);
-                for (long i=0; i<rank; ++i) {
-                    double lo,hi;
-                    tensorT c=vec(Slice(i,i),_,_,_).reshape(maxk,maxk,maxk);
-                    g.get_impl()->tnorm(c, &lo, &hi);        // note we use g instead of h, since g is 3D
-                    flo+=lo*fcoeff.get_svdtensor().weights(i);
-                    fhi+=hi*fcoeff.get_svdtensor().weights(i);
+                if (fcoeff.is_svd_tensor()) {
+					const long rank=fcoeff.rank();
+					const long maxk=fcoeff.dim(0);
+					tensorT vec=fcoeff.get_svdtensor().ref_vector(particle-1).reshape(rank,maxk,maxk,maxk);
+					for (long i=0; i<rank; ++i) {
+						double lo,hi;
+						tensorT c=vec(Slice(i,i),_,_,_).reshape(maxk,maxk,maxk);
+						g.get_impl()->tnorm(c, &lo, &hi);        // note we use g instead of h, since g is 3D
+						flo+=lo*fcoeff.get_svdtensor().weights(i);
+						fhi+=hi*fcoeff.get_svdtensor().weights(i);
+					}
+                } else if (fcoeff.is_full_tensor()) {
+
+                	f.get_impl()->tnorm(fcoeff.full_tensor(),&flo,&fhi);
+
+                } else {
+                	MADNESS_EXCEPTION("unusable tensor type in multiply_op",1);
+                	return false;
                 }
+
                 double total_hi=glo*fhi + ghi*flo + fhi*ghi;
                 return (total_hi<h->truncate_tol(h->get_thresh(),key));
-
             }
 
             /// apply this on a FunctionNode of f and g of Key key
@@ -4573,7 +4581,7 @@ namespace madness {
             // do SVD tensors instead of tensortrains, because addition in apply
             // can be done in full form for the specific particle
             coeffT coeff_SVD=coeff.convert(TensorArgs(-1.0,TT_2D));
-#ifdef USE_LRT
+#ifdef HAVE_GENTENSOR
             coeff_SVD.get_svdtensor().orthonormalize(tol*GenTensor<T>::fac_reduce());
 #endif
 
@@ -5850,6 +5858,9 @@ namespace madness {
 
         /// Returns the number of coefficients in the function ... collective global sum
         std::size_t size() const;
+
+        /// Returns the number of coefficients in the function ... collective global sum
+        std::size_t nCoeff() const;
 
         /// Returns the number of coefficients in the function ... collective global sum
         std::size_t real_size() const;

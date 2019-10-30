@@ -1753,17 +1753,29 @@ namespace madness {
         TensorArgs tight_args(targs);
         tight_args.thresh*=0.01;
         double begin=wall_time();
+        double begin1=wall_time();
         flo_unary_op_node_inplace(do_consolidate_buffer(tight_args),true);
+        double end1=wall_time();
+        if (world.rank()==0) printf("time in consolidate_buffer    %8.4f\n",end1-begin1);
 
         // reduce the rank of the final nodes, leave full tensors unchanged
         //            flo_unary_op_node_inplace(do_reduce_rank(tight_args.thresh),true);
+        begin1=wall_time();
         flo_unary_op_node_inplace(do_reduce_rank(targs),true);
+        end1=wall_time();
+        if (world.rank()==0) printf("time in do_reduce_rank        %8.4f\n",end1-begin1);
 
         // change TT_FULL to low rank
+        begin1=wall_time();
         flo_unary_op_node_inplace(do_change_tensor_type(targs,*this),true);
+        end1=wall_time();
+        if (world.rank()==0) printf("time in do_change_tensor_type %8.4f\n",end1-begin1);
 
         // truncate leaf nodes to avoid excessive tree refinement
+        begin1=wall_time();
         flo_unary_op_node_inplace(do_truncate_NS_leafs(this),true);
+        end1=wall_time();
+        if (world.rank()==0) printf("time in do_truncate_NS_leafs  %8.4f\n",end1-begin1);
 
         double end=wall_time();
         double elapsed=end-begin;
@@ -1879,13 +1891,26 @@ namespace madness {
         return sum;
     }
 
+    /// Returns the number of coefficients in the function ... collective global sum
+    template <typename T, std::size_t NDIM>
+    std::size_t FunctionImpl<T,NDIM>::nCoeff() const {
+        std::size_t sum = coeffs.size() * (sizeof(keyT) + sizeof(nodeT));
+        typename dcT::const_iterator end = coeffs.end();
+        for (typename dcT::const_iterator it=coeffs.begin(); it!=end; ++it) {
+            const nodeT& node = it->second;
+            if (node.has_coeff()) sum+=node.coeff().nCoeff();
+        }
+        world.gop.sum(sum);
+        return sum;
+    }
+
 
     /// print tree size and size
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::print_size(const std::string name) const {
         const size_t tsize=this->tree_size();
-        const size_t size=this->size();
-        const size_t rsize=this->real_size();
+//        const size_t size=this->size();
+        const size_t ncoeff=this->nCoeff();
         const double wall=wall_time();
         const double d=sizeof(T);
         const double fac=1024*1024*1024;
@@ -1899,8 +1924,8 @@ namespace madness {
         }
 
         if (this->world.rank()==0) {
-            printf("%40s at time %.1fs: norm/tree/real/size: %7.5f %zu, %6.3f, %6.3f GByte\n",
-                   (name.c_str()), wall, norm, tsize,double(rsize)/fac*d,double(size)/fac*d);
+            printf("%40s at time %.1fs: norm/tree/#coeff/size: %7.5f %zu, %6.3f m, %6.3f GByte\n",
+                   (name.c_str()), wall, norm, tsize,double(ncoeff)*1.e-6,double(ncoeff)/fac*d);
         }
     }
 

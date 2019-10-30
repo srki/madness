@@ -806,6 +806,7 @@ real_function_6d MP2::make_KffKphi0(const ElectronPair& pair) const {
 			printf("< nemo0 | R^2 R-1 f K R | nemo0 >  %12.8f\n", a2);
 	}
 	KffKphi0 = (Kfphi0 - fKphi0).truncate().reduce_rank();
+	save_function(KffKphi0,"KffKphi0");
 
 	// sanity check
 	real_function_6d tmp = CompositeFactory<double, 6, 3>(world).particle1(
@@ -865,15 +866,19 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 	real_convolution_6d green = BSHOperator<6>(world, sqrt(-2.0 * eps), lo,
 			bsh_eps);
 
-	real_function_6d Uphi0;
+	real_function_6d Uphi0,KffKphi0;
 	if (param.read_Uphi0()) {
 		load_function(Uphi0,"Uphi0");
 	} else {
 		Uphi0 = make_Uphi0(pair);
 		save_function(Uphi0, "Uphi0");
 	}
-
-    real_function_6d KffKphi0 = make_KffKphi0(pair);
+	if (param.read_KffKphi0()) {
+		load_function(KffKphi0,"KffKphi0");
+	} else {
+		KffKphi0 = make_KffKphi0(pair);
+		save_function(KffKphi0, "KffKphi0");
+	}
 
 	// these are the terms that come from the single projectors: (O1 + O2) (U+[K,f])|phi^0>
 	std::vector<real_function_3d> phi_k_UK_phi0;
@@ -894,6 +899,7 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 	// make the terms with high ranks and smallish trees
 	load_balance(Uphi0, true);
 	real_function_6d Vpair1 = (Uphi0 - KffKphi0).truncate().reduce_rank();
+//	Vpair1.get_impl()->erase(3);
 	Uphi0.clear();
 	KffKphi0.clear();
 	asymmetry(Vpair1, "Vpair");

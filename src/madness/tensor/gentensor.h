@@ -126,6 +126,7 @@ std::ostream& operator << (std::ostream& s, const TensorType& tt) {
 	if (tt==TT_FULL) str="full rank tensor";
 	if (tt==TT_2D) str="low rank tensor 2-way";
 	if (tt==TT_TENSORTRAIN) str="tensor train";
+//	if (tt==TT_DYNAMIC) str="dynamic";
 	s << str.c_str();
 	return s;
 }

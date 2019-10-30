@@ -103,35 +103,40 @@ public:
 
 	/// ctor with a regular Tensor and arguments, deep
 	GenTensor(const Tensor<T>& rhs, const TensorArgs& targs) {
-//		if (targs.tt==TT_FULL) tensor=std::shared_ptr<Tensor<T> >(new Tensor<T>(copy(rhs)));
 		if (targs.tt==TT_FULL) *this=copy(rhs);
 		else if (targs.tt==TT_2D) {
 			if (rhs.size()==0) {
 				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
 			} else {
-
-				long maxrank=std::max(50.0,floor(0.3*sqrt(rhs.size())));
-				RandomizedMatrixDecomposition<T> rmd=RMDFactory().maxrank(maxrank);
-				Tensor<T> Q=rmd.compute_range(rhs,targs.thresh*facReduce()*0.1,{0,0});
-				if (Q.size()==0) {
-					*this=SVDTensor<T>(rhs.ndim(),rhs.dims());
-				} else if (not rmd.exceeds_maxrank()) {
-					SVDTensor<T> result(rhs.ndim(),rhs.dims());
-					result=SVDTensor<T>::compute_svd_from_range(Q,rhs);
-					*this=result;
-				} else {
-					*this=copy(rhs);
-//					TensorTrain<T> tt(rhs,targs.thresh*facReduce());
-//					GenTensor<T> tmp=tt;
-//					*this=tmp.convert(targs);
-				}
-//				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
+				TensorTrain<T> tt(rhs,targs.thresh*facReduce());
+				GenTensor<T> tmp=tt;
+				*this=tmp.convert(targs);
 			}
-		}
-		else if (targs.tt==TT_TENSORTRAIN) {
+//		} else if (targs.tt==TT_DYNAMIC) {
+//			if (rhs.size()==0) {
+//				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
+//			} else {
+//
+//				long maxrank=std::max(50.0,floor(0.3*sqrt(rhs.size())));
+//				RandomizedMatrixDecomposition<T> rmd=RMDFactory().maxrank(maxrank);
+//				Tensor<T> Q=rmd.compute_range(rhs,targs.thresh*facReduce()*0.1,{0,0});
+//				if (Q.size()==0) {
+//					*this=SVDTensor<T>(rhs.ndim(),rhs.dims());
+//				} else if (not rmd.exceeds_maxrank()) {
+//					SVDTensor<T> result(rhs.ndim(),rhs.dims());
+//					result=SVDTensor<T>::compute_svd_from_range(Q,rhs);
+//					*this=result;
+//				} else {
+//					*this=copy(rhs);
+////					TensorTrain<T> tt(rhs,targs.thresh*facReduce());
+////					GenTensor<T> tmp=tt;
+////					*this=tmp.convert(targs);
+//				}
+////				tensor=std::shared_ptr<SVDTensor<T> >(new SVDTensor<T>(rhs,targs.thresh*facReduce()));
+//			}
+		} else if (targs.tt==TT_TENSORTRAIN) {
 			tensor=std::shared_ptr<TensorTrain<T> >(new TensorTrain<T>(rhs,targs.thresh*facReduce()));
-		}
-		else {
+		} else {
 			MADNESS_EXCEPTION("unknown tensor type in LowRankTensor constructor",1);
 		}
 	}
@@ -321,6 +326,7 @@ public:
 		// fast return
 		if (not is_assigned()) return *this;
 		if (is_of_tensortype(targs.tt)) return *this;
+//		if (targs.tt==TT_DYNAMIC) if (is_svd_tensor()) return *this;
 
 		// target is full tensor
 		if (targs.tt==TT_FULL) {
@@ -473,6 +479,16 @@ public:
 		return (is_assigned()) ? ptr()->size() : 0;
 	}
 
+	long nCoeff() const {
+		if (is_full_tensor()) return get_tensor().size();
+		else if (is_svd_tensor()) return get_svdtensor().nCoeff();
+		else if (is_tensortrain()) return get_tensortrain().real_size();
+		else {
+			MADNESS_EXCEPTION("you should not be here",1);
+		}
+		return false;
+	}
+
 	long real_size() const {
 		if (is_full_tensor()) return get_tensor().size();
 		else if (is_svd_tensor()) return get_svdtensor().real_size();
@@ -561,6 +577,7 @@ public:
 
 		// deliberately excluding gaxpys for different tensors due to efficiency considerations!
 		MADNESS_ASSERT(is_same_tensor_type(*this,other));
+		MADNESS_ASSERT(is_assigned());
 		if (is_full_tensor()) get_tensor().gaxpy(alpha,other.get_tensor(),beta);
 		else if (is_svd_tensor()) get_svdtensor().gaxpy(alpha,other.get_svdtensor(),beta);
 		else if (is_tensortrain()) get_tensortrain().gaxpy(alpha,other.get_tensortrain(),beta);
@@ -575,6 +592,7 @@ public:
 
 		// deliberately excluding gaxpys for different tensors due to efficiency considerations!
 		MADNESS_ASSERT(is_same_tensor_type(*this,other));
+		MADNESS_ASSERT(is_assigned());
 
 		if (is_full_tensor()) {
 			get_tensor()(s0).gaxpy(alpha,other.get_tensor()(s1),beta);
@@ -885,12 +903,32 @@ operator*(const Q& x, const GenTensor<T>& t) {
 template<typename T>
 GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_optimal=false) {
 	typedef typename std::list<GenTensor<T> >::iterator iterT;
-	GenTensor<T> result=copy(addends.front());
-	for (iterT it=++addends.begin(); it!=addends.end(); ++it) {
-		result+=*it;
+
+	// fast return
+	addends.remove_if([](auto element) {return not element.is_assigned();});
+	if (addends.size()==0) return GenTensor<T>();
+
+	// make error relative
+	eps=eps/addends.size();
+
+	// if the addends are not in SVD format do that now so that we can call add_svd later
+	if (not are_optimal) {
+		for (auto element : addends) element.reduce_rank(eps);
 	}
-	result.reduce_rank(eps);
+
+	// remove zero ranks and sort the list according to the gentensor's ranks
+	addends.remove_if([](auto element) {return element.rank()==0;});
+	if (addends.size()==0) return GenTensor<T>();
+	addends.sort([](auto element1, auto element2) {return element1.rank()<element2.rank();});
+
+	// do the additions
+	GenTensor<T> result=copy(addends.front());
+	addends.pop_front();
+	for (auto element : addends) result.add_SVD(element,eps);
+	addends.clear();
+
 	return result;
+
 
 }
 
