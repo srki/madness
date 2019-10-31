@@ -213,7 +213,7 @@ void dgeqrf_(integer *m, integer *n,
    	 real4 *a, integer *lda, real4 *tau,
    	 real4 *work, integer *lwork, integer *infoOUT) {
 #if MADNESS_LINALG_USE_LAPACKE
-	sgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+	LAPACKE_sgeqrf(LAPACK_ROW_MAJOR, *m, *n, a, *lda, tau);
 #else
 	sgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #endif
@@ -235,7 +235,7 @@ void dgeqrf_(integer *m, integer *n,
 		float_complex *a, integer *lda, float_complex *tau,
 		float_complex *work, integer *lwork, integer *infoOUT) {
 #if MADNESS_LINALG_USE_LAPACKE
-	cgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+	LAPACKE_cgeqrf(LAPACK_ROW_MAJOR, *m, *n, to_cptr(a), *lda, to_cptr(tau));
 #else
 	cgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #endif
@@ -246,7 +246,7 @@ void dgeqrf_(integer *m, integer *n,
 		double_complex *a, integer *lda, double_complex *tau,
 		double_complex *work, integer *lwork, integer *infoOUT) {
 #if MADNESS_LINALG_USE_LAPACKE
-	zgeqrf_(LAPACK_ROW_MAJOR, m, n, a, lda, tau);
+	LAPACKE_zgeqrf(LAPACK_ROW_MAJOR, *m, *n, to_zptr(a), *lda, to_zptr(tau));
 #else
 	zgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #endif
