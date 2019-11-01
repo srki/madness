@@ -912,7 +912,7 @@ public:
 		SRConf<TENSOR_RESULT_TYPE(T,Q) > general_transform(const Tensor<Q> c[]) const {
 
 			// fast return if possible
-			if (this->has_no_data() or rank()==0) SRConf<T>(ndim(),dims(),nci_left);
+			if (this->has_no_data() or rank()==0) return SRConf<T>(ndim(),dims(),nci_left);
 
 			// copying shrinks the vectors to (r,k,k,..)
 			SRConf<T> result=copy(*this);

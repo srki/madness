@@ -357,6 +357,7 @@ public:
 			U=copy(transpose(U.reshape(n,rank)));   // make it contiguous
 			VT=VT.reshape(rank,m);
 			SVDTensor<T> svdtensor(s, U, VT, ndim(), dims());
+			svdtensor.normalize();
 			*this=svdtensor;
 		} else {
 			print("conversion from type ",index(), "to type", targs.tt,"not supported");
