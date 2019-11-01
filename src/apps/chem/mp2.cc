@@ -873,6 +873,7 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 		Uphi0 = make_Uphi0(pair);
 		save_function(Uphi0, "Uphi0");
 	}
+
 	if (param.read_KffKphi0()) {
 		load_function(KffKphi0,"KffKphi0");
 	} else {
@@ -895,24 +896,23 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 		phi_l_UK_phi0.push_back(tmp);
 	}
 
-
 	// make the terms with high ranks and smallish trees
-	load_balance(Uphi0, true);
-	real_function_6d Vpair1 = (Uphi0 - KffKphi0).truncate().reduce_rank();
-//	Vpair1.get_impl()->erase(3);
-	Uphi0.clear();
-	KffKphi0.clear();
-	asymmetry(Vpair1, "Vpair");
-	load_balance(Vpair1, false);
 	real_function_6d GVpair;
-	green.destructive() = true;			// green will destroy Vpair1
-	GVpair = green(-2.0 * Vpair1).truncate().reduce_rank();
-	Vpair1.clear(true);
-	if (world.rank() == 0)
-		print("symmetry GVpair1");
-	save_function(GVpair, "GVpair1");
-	//			load_function(GVpair,"GVpair1");
-	asymmetry(GVpair, "GVpair1");
+	if (param.read_somefunction("gvpair1")) {
+		load_function(GVpair,"GVpair1");
+	} else {
+		load_balance(Uphi0, true);
+		real_function_6d Vpair1 = (Uphi0 - KffKphi0).truncate().reduce_rank();
+		Uphi0.clear();
+		KffKphi0.clear();
+		asymmetry(Vpair1, "Vpair");
+		load_balance(Vpair1, false);
+		green.destructive() = true;			// green will destroy Vpair1
+		GVpair = green(-2.0 * Vpair1).truncate().reduce_rank();
+		Vpair1.clear(true);
+		save_function(GVpair, "GVpair1");
+	}
+
 	pair.function = GVpair;
 	compute_energy(pair);
 
