@@ -1109,7 +1109,7 @@ namespace madness {
         coeffT val_ket=coeffs2values(key,coeff_ket);
 
         // the result tensor
-        coeffT val_result;
+        coeffT val_result=coeffT(val_ket.ndim(),val_ket.dims(),this->get_tensor_args().tt);
         coeffT coeff_result;
 
         // potential for particles 1 and 2, must be done in TT_2D
