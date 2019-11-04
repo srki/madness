@@ -213,7 +213,7 @@ void dgeqrf_(integer *m, integer *n,
    	 real4 *a, integer *lda, real4 *tau,
    	 real4 *work, integer *lwork, integer *infoOUT) {
 #if MADNESS_LINALG_USE_LAPACKE
-	LAPACKE_sgeqrf(LAPACK_ROW_MAJOR, *m, *n, a, *lda, tau);
+	sgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #else
 	sgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #endif
@@ -235,7 +235,7 @@ void dgeqrf_(integer *m, integer *n,
 		float_complex *a, integer *lda, float_complex *tau,
 		float_complex *work, integer *lwork, integer *infoOUT) {
 #if MADNESS_LINALG_USE_LAPACKE
-	LAPACKE_cgeqrf(LAPACK_ROW_MAJOR, *m, *n, to_cptr(a), *lda, to_cptr(tau));
+	cgeqrf_(m, n, to_cptr(a), lda, to_cptr(tau), to_cptr(work), lwork, infoOUT);
 #else
 	cgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #endif
@@ -246,7 +246,7 @@ void dgeqrf_(integer *m, integer *n,
 		double_complex *a, integer *lda, double_complex *tau,
 		double_complex *work, integer *lwork, integer *infoOUT) {
 #if MADNESS_LINALG_USE_LAPACKE
-	LAPACKE_zgeqrf(LAPACK_ROW_MAJOR, *m, *n, to_zptr(a), *lda, to_zptr(tau));
+	zgeqrf_(m, n, to_zptr(a), lda, to_zptr(tau), to_zptr(work), lwork, infoOUT);
 #else
 	zgeqrf_(m, n, a, lda, tau, work, lwork, infoOUT);
 #endif
@@ -1289,25 +1289,19 @@ namespace madness {
             cout << endl;
 
             cout << "error in float cholesky " << test_cholesky<float>(22) << endl;
-            cout << endl;
             cout << "error in double cholesky " << test_cholesky<double>(22) << endl;
-            cout << endl;
             cout << "error in float_complex cholesky " << test_cholesky<float_complex>(22) << endl;
-            cout << endl;
             cout << "error in double_complex cholesky " << test_cholesky<double_complex>(22) << endl;
             cout << endl;
+
             cout << "error in float rr_cholesky " << test_rr_cholesky<float>(22) << endl;
-            cout << endl;
             cout << "error in double rr_cholesky " << test_rr_cholesky<double>(22) << endl;
-            cout << endl;
             cout << "error in float_complex rr_cholesky " << test_rr_cholesky<float_complex>(22) << endl;
-            cout << endl;
             cout << "error in double_complex rr_cholesky " << test_rr_cholesky<double_complex>(22) << endl;
             cout << endl;
 
-            cout << endl;
-            cout << "error in float QR/LQ " << test_qr<float>() << endl;
             cout << "error in double QR/LQ " << test_qr<double>() << endl;
+            cout << "error in float QR/LQ " << test_qr<float>() << endl;
             cout << "error in float_complex QR/LQ " << test_qr<float_complex>() << endl;
             cout << "error in double_complex QR/LQ " << test_qr<double_complex>() << endl;
             cout << endl;
