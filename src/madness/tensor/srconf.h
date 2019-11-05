@@ -282,7 +282,7 @@ namespace madness {
 			return (size()!=0);
 		}
 
-	private:
+	protected:
 
 		/// does this have any data?
 		bool has_no_data() const {return !has_data();}
@@ -296,83 +296,6 @@ namespace madness {
 			}
 		}
 
-		/// reduce the rank using a divide-and-conquer approach
-		void divide_and_conquer_reduce(const double& thresh) {
-
-			if (has_no_data() or rank()==0) return;
-			if (rank()==1) {
-				normalize();
-				return;
-			}
-
-			// divide the SRConf into two
-			const long chunksize=8;
-			if (rank()>chunksize) {
-        		SRConf<T> chunk1=this->get_configs(0,rank()/2);
-        		SRConf<T> chunk2=this->get_configs(rank()/2+1,rank()-1);
-        		chunk1.divide_and_conquer_reduce(thresh*0.5);
-        		chunk2.divide_and_conquer_reduce(thresh*0.5);
-
-        		// collect the two SRConfs
-        		*this=chunk1;
-        		this->add_SVD(chunk2,thresh);
-
-			} else {
-
-				// and reduce the rank
-				this->orthonormalize(thresh);
-			}
-            MADNESS_ASSERT(has_structure());
-		}
-
-	public:
-		/// orthonormalize this
-		void orthonormalize(const double& thresh) {
-
-			if (has_no_data() or rank()==0) return;
-			if (rank()==1) {
-				normalize();
-				return;
-			}
-#ifdef BENCH
-			double cpu0=wall_time();
-#endif
-//			vector_[0]=copy(vector_[0](c0()));
-//			vector_[1]=copy(vector_[1](c0()));
-//			weights_=weights_(Slice(0,rank()-1));
-            normalize();
-#ifdef BENCH
-			double cpu1=wall_time();
-#endif
-//            this->undo_structure();
-			weights_=weights_(Slice(0,rank()-1));
-//			ortho3(vector_[0],vector_[1],weights_,thresh);
-            tensorT v0=flat_vector(0);
-            tensorT v1=flat_vector(1);
-#ifdef BENCH
-			double cpu2=wall_time();
-#endif
-			ortho3(v0,v1,weights_,thresh);
-            std::swap(vector_[0],v0);
-            std::swap(vector_[1],v1);
-#ifdef BENCH
-			double cpu3=wall_time();
-#endif
-			this->make_structure();
-			make_slices();
-            MADNESS_ASSERT(has_structure());
-#ifdef BENCH
-			double cpu4=wall_time();
-			SRConf<T>::time(21)+=cpu1-cpu0;
-			SRConf<T>::time(22)+=cpu2-cpu1;
-			SRConf<T>::time(23)+=cpu3-cpu2;
-			SRConf<T>::time(24)+=cpu4-cpu3;
-			SRConf<T>::time(20)+=cpu4-cpu0;
-#endif
-
-		}
-
-	protected:
 		/// append configurations of rhs to this
 
 		/// simplified version of inplace_add for flattened configurations
@@ -634,7 +557,7 @@ protected:
 		    return result;
 		}
 
-	private:
+	protected:
 		/// fill this SRConf with 1 flattened random configurations (tested)
 		void fillWithRandom(const long& rank=1) {
 
@@ -1206,7 +1129,7 @@ public:
 
 		// diagonalize
 		tensorT U1, U2;
-		Tensor<double> e1, e2;
+		Tensor<typename Tensor<T>::scalar_type> e1, e2;
 	    syev(Sx,U1,e1);
 	    syev(Sy,U2,e2);										// 2.3 / 4.0
 #ifdef BENCH
@@ -1272,19 +1195,11 @@ public:
     	for (unsigned int r=0; r<rank_x; r++) {
     		double fac=1.0/sqrt_e1(r);
     		U1(_,r)*=fac;
-//    		for (unsigned int t=0; t<rank; t++) {
-//	    		U1(t,r)*=fac;
-////	    		if (sqrt_e1(r)<thresh) throw;
-//    		}
     	}
 
 	   	for (unsigned int r=0; r<rank_y; r++) {
     		double fac=1.0/sqrt_e2(r);
     		U2(_,r)*=fac;
-//    		for (unsigned int t=0; t<rank; t++) {
-//	    		U2(t,r)*=fac;
-////	    		if (sqrt_e2(r)<thresh) throw;
-//	    	}
 	    }													// 0.2 / 0.6
 #ifdef BENCH
 		double cpu4=wall_time();
@@ -1294,7 +1209,7 @@ public:
 
 	    // decompose M
 		tensorT Up,VTp;
-		Tensor<double> Sp;
+		Tensor<typename Tensor<T>::scalar_type> Sp;
 		svd(M,Up,Sp,VTp);									// 1.5 / 3.0
 #ifdef BENCH
 		double cpu5=wall_time();

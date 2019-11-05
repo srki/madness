@@ -127,6 +127,55 @@ SVDTensor<T> SVDTensor<T>::compute_svd_from_range(const Tensor<T>& Q, const Tens
 }
 
 
+/// reduce the rank using a divide-and-conquer approach
+template<typename T>
+void SVDTensor<T>::divide_and_conquer_reduce(const double& thresh) {
+
+	if (this->has_no_data() or rank()==0) return;
+	if (rank()==1) {
+		this->normalize();
+		return;
+	}
+
+	// divide the SRConf into two
+	const long chunksize=8;
+	if (rank()>chunksize) {
+		SVDTensor<T> chunk1=this->get_configs(0,rank()/2);
+		SVDTensor<T> chunk2=this->get_configs(rank()/2+1,rank()-1);
+		chunk1.divide_and_conquer_reduce(thresh*0.5);
+		chunk2.divide_and_conquer_reduce(thresh*0.5);
+
+		// collect the two SRConfs
+		*this=chunk1;
+		this->add_SVD(chunk2,thresh);
+
+	} else {
+
+		// and reduce the rank
+		this->orthonormalize(thresh);
+	}
+    MADNESS_ASSERT(this->has_structure());
+}
+
+template<typename T>
+void SVDTensor<T>::orthonormalize(const double& thresh) {
+
+	if (this->has_no_data() or rank()==0) return;
+	this->normalize();
+	if (rank()==1) return;
+
+	Tensor< typename Tensor<T>::scalar_type > weights=this->weights_(Slice(0,rank()-1));
+
+    Tensor<T> v0=this->flat_vector(0);
+    Tensor<T> v1=this->flat_vector(1);
+	ortho3(v0,v1,weights,thresh);
+    std::swap(this->vector_[0],v0);
+    std::swap(this->vector_[1],v1);
+    std::swap(this->weights_,weights);
+	this->make_structure();
+}
+
+
 
 // explicit instantiation
 template class SVDTensor<float>;

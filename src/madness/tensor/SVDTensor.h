@@ -74,6 +74,8 @@ public:
 		return SRConf<T>::nCoeff();
 	}
 
+	long rank() const {return SRConf<T>::rank();};
+
 	/// reduce the rank using SVD
 	static SVDTensor compute_svd(const Tensor<T>& tensor,
 			const double& eps, std::array<long,2> vectordim={0,0});
@@ -138,6 +140,12 @@ public:
 		return *this;
 	}
 
+	// reduce the rank using a divide-and-conquer approach
+	void divide_and_conquer_reduce(const double& thresh);
+
+	void orthonormalize(const double& thresh);
+
+
 private:
 
 public:
@@ -160,7 +168,7 @@ public:
 
     friend SVDTensor<T> reduce(std::list<SVDTensor<T> >& addends, double eps) {
     	SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
-    	result.orthonormalize(eps);
+    	result.divide_and_conquer_reduce(eps);
     	return result;
     }
 
