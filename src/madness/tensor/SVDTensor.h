@@ -158,10 +158,7 @@ public:
     friend SVDTensor<TENSOR_RESULT_TYPE(R,Q)> outer(
     		const SVDTensor<R>& t1, const SVDTensor<Q>& t2);
 
-    template <typename R>
-    friend SVDTensor<R> reduce(
-    		std::list<SVDTensor<R> >& addends, double eps) {
-
+    friend SVDTensor<T> reduce(std::list<SVDTensor<T> >& addends, double eps) {
     	SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
     	result.orthonormalize(eps);
     	return result;
