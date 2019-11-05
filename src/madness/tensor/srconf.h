@@ -415,6 +415,7 @@ namespace madness {
             MADNESS_ASSERT(has_structure());
 
 		}
+
 		void append(const SRConf<T>& rhs, const double_complex fac=1.0) {
 			MADNESS_EXCEPTION("no complex in SRConf",1);
 		}
@@ -612,7 +613,6 @@ protected:
 			return vector_[idim];
 		}
 
-	private:
 
 		long kVec(const int idim) const {
 			return vector_[idim].size()/vector_[idim].dim(0);
@@ -634,6 +634,7 @@ protected:
 		    return result;
 		}
 
+	private:
 		/// fill this SRConf with 1 flattened random configurations (tested)
 		void fillWithRandom(const long& rank=1) {
 
@@ -753,16 +754,20 @@ protected:
             if (rank()==0) return Tensor<T> (ndim(),dims(),true);
 
             // include weights in left vector
-            Tensor<T> scr=copy(this->flat_vector(0)(c0(0)));
-            for (unsigned int r=0; r<rank(); r++) {
-            	const double w=weights(r);
-            	for (unsigned int k=0; k<this->kVec(0); k++) {
-            		scr(r,k)*=w;
-				}
-            }
+            Tensor<T> scr=make_left_vector_with_weights();
 
-			Tensor<T> result=(inner(conj(scr),(flat_vector(1)(c0(1))),0,0));
+			Tensor<T> result=inner(conj(scr),flat_vector(1),0,0);
             return result.reshape(ndim(),dims());
+        }
+
+	protected:
+
+        Tensor<T> make_left_vector_with_weights() const {
+        	Tensor<T> v=copy(vector_[0].reshape(rank(),vector_[0].size()/rank()));
+        	for (unsigned int r=0; r<rank(); r++) {
+            	v(r,_)*=weights(r);
+            }
+        	return v;
         }
 
 	protected:

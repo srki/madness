@@ -70,7 +70,7 @@ public:
 		return *this;
 	}
 
-	long size() const {
+	long nCoeff() const {
 		return SRConf<T>::nCoeff();
 	}
 
@@ -86,6 +86,44 @@ public:
 
 	/// following Alg. 5.1 of HMT 2011
 	static SVDTensor compute_svd_from_range(const Tensor<T>& range, const Tensor<T>& matrix);
+
+
+	/// concatenate all arguments into a single SRConf (i.e. adding them all up)
+	static SVDTensor<T> concatenate(const std::list<SVDTensor<T> >& addends) {
+
+		if (addends.size()==0) return SVDTensor<T>();
+
+		// collect all terms in a single SRConf
+		SRConf<T> result(addends.front().ndim(),addends.front().dims(),addends.front().nci_left);
+
+		long totalrank=0;
+		for (auto a : addends) totalrank+=a.rank();
+		if (totalrank==0) return result;
+
+		auto dimensions=result.make_vector_dimensions(totalrank);
+		typedef typename TensorTypeData<T>::float_scalar_type float_scalar_type;
+
+		Tensor<float_scalar_type> weights(totalrank);
+		Tensor<T> vector0(result.nci_left+1,dimensions[0].data());
+		vector0=vector0.reshape(totalrank,vector0.size()/totalrank);
+		Tensor<T> vector1(result.ndim()-result.nci_left+1,dimensions[1].data());
+		vector1=vector1.reshape(totalrank,vector1.size()/totalrank);
+
+		long start=0;
+		for (auto a: addends) {
+			MADNESS_ASSERT(compatible(result,a));
+			long end=start+a.rank()-1;
+			vector0(Slice(start,end),_)=a.flat_vector(0);
+			vector1(Slice(start,end),_)=a.flat_vector(1);
+			weights(Slice(start,end))=a.weights_;
+			start+=a.rank();
+		}
+
+		result.set_vectors_and_weights(weights,vector0,vector1);
+		return SVDTensor(result);
+
+	}
+
 
 
 	SVDTensor<T>& emul(const SVDTensor<T>& other) {
@@ -119,6 +157,15 @@ public:
     template <typename R, typename Q>
     friend SVDTensor<TENSOR_RESULT_TYPE(R,Q)> outer(
     		const SVDTensor<R>& t1, const SVDTensor<Q>& t2);
+
+    template <typename R>
+    friend SVDTensor<R> reduce(
+    		std::list<SVDTensor<R> >& addends, double eps) {
+
+    	SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
+    	result.orthonormalize(eps);
+    	return result;
+    }
 
     friend SVDTensor<T> copy(const SVDTensor<T>& rhs) {
     	const SRConf<T>& base=rhs;
