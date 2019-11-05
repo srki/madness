@@ -907,8 +907,15 @@ GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_opti
 
 	// fast return
 	addends.remove_if([](auto element) {return not element.is_assigned();});
+	addends.remove_if([](auto element) {return element.rank()==0;});
 	if (addends.size()==0) return GenTensor<T>();
 
+
+	if (addends.front().is_svd_tensor()) {
+		std::list<SVDTensor<T> > addends1;
+		for (auto a : addends) addends1.push_back(a.get_svdtensor());
+		return reduce(addends1,eps);
+	}
 	// make error relative
 	eps=eps/addends.size();
 
@@ -929,9 +936,9 @@ GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_opti
 	addends.clear();
 
 	return result;
-
-
 }
+
+
 
 
 /// implements a temporary(!) slice of a LowRankTensor
