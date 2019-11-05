@@ -41,6 +41,22 @@ using namespace madness;
 
 namespace madness {
 
+static std::string reduction_alg="divide_conquer";
+
+template<typename T>
+void SVDTensor<T>::set_reduction_algorithm(const std::string alg) {
+	reduction_alg=alg;
+}
+
+template<typename T>
+std::string SVDTensor<T>::reduction_algorithm() {
+
+	if (getenv("REDUCTION_ALGORITHM")){
+		char* calg = getenv("REDUCTION_ALGORITHM");
+		return std::string(calg);
+	}
+	return reduction_alg;
+}
 
 /// reduce the rank using SVD
 template<typename T>
@@ -98,6 +114,8 @@ SVDTensor<T> SVDTensor<T>::compute_randomized_svd(const Tensor<T>& tensor,
 		print("fall back into full SVD: rank, maxrank",Q.dim(1),maxrank, attempt, wall1-wall0);
 	} else if (Q.size()>0) {
 		result=compute_svd_from_range(Q,tensor);
+		result.truncate_svd(eps);
+
 	} else {
 		MADNESS_ASSERT(Q.size()==0);
 	}
@@ -124,6 +142,28 @@ SVDTensor<T> SVDTensor<T>::compute_svd_from_range(const Tensor<T>& Q, const Tens
 	SVDTensor<T> result(tensor.ndim(),tensor.dims());
 	result.set_vectors_and_weights(s,U,VT);
 	return result;
+}
+
+template<typename T>
+void SVDTensor<T>::recompute_from_range(const Tensor<T>& Q) {
+
+	// check dimensions
+	// tensor = A = Q * Q(T) A = Q * Q(T) * left(T) * right
+	MADNESS_ASSERT(Q.dim(0)==this->flat_vector(0).dim(1));
+
+	const Tensor<T> U_ri=this->make_left_vector_with_weights();
+	const Tensor<T> V_rj=this->flat_vector(1);
+
+	Tensor<T> B=inner(inner(conj(Q),U_ri,0,1),V_rj,1,0);
+
+	Tensor<T> U,VT;
+	typedef typename Tensor<T>::scalar_type scalar_type;
+	Tensor<scalar_type> s;
+	svd(B,U,s,VT);
+
+	U=copy(conj_transpose(inner(Q,U)));
+	this->set_vectors_and_weights(s,U,VT);
+
 }
 
 
@@ -174,6 +214,36 @@ void SVDTensor<T>::orthonormalize(const double& thresh) {
     std::swap(this->weights_,weights);
 	this->make_structure();
 }
+
+
+template<typename T>
+void SVDTensor<T>::orthonormalize_random(const double& eps) {
+
+	if (this->has_no_data() or rank()==0) return;
+	this->normalize();
+	if (rank()==1) return;
+
+	long maxrank=std::min(this->kVec(0),this->kVec(1));
+
+	double wall0=wall_time();
+	RandomizedMatrixDecomposition<T> rmd=RMDFactory().maxrank(maxrank);
+	Tensor<T> scr=this->make_left_vector_with_weights();
+	Tensor<T> Q=rmd.compute_range(scr,this->flat_vector(1),eps*0.1);
+
+	recompute_from_range(Q);
+	truncate_svd(eps);
+
+
+}
+
+template<typename T>
+void SVDTensor<T>::truncate_svd(const double& thresh) {
+
+	// compute the numerical rank
+	long maxrank=SRConf<T>::max_sigma(thresh, rank(), this->weights_);
+	*this=this->get_configs(0,maxrank);
+}
+
 
 
 

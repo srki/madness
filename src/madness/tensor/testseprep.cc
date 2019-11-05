@@ -735,21 +735,28 @@ int testGenTensor_reduce(const long& k, const long& dim, const double& eps, cons
 	double norm=0.0;
 	int nerror=0;
 
-	// reconstruct
-	for (int i=0; i<3; i++) {
-		addends.clear();
+	std::vector<std::string> reduction={"divide_conquer","full","RMD"};
 
-		addends.push_back(GenTensor<double>(t[0],eps,tt));
-		addends.push_back(GenTensor<double>(t[1],eps,tt));
-		addends.push_back(GenTensor<double>(t[2],eps,tt));
+	for (auto alg : reduction) {
+		SVDTensor<double>::set_reduction_algorithm(alg);
+		print("setting reduction algorithm to  ", alg);
 
-		GenTensor<double> result=reduce(addends,eps,true);
-		Tensor<double> tresult=t[0]+t[1]+t[2];
+		// reconstruct
+		for (int i=0; i<3; i++) {
+			addends.clear();
 
-		norm=(tresult-result.full_tensor_copy()).normf();
+			addends.push_back(GenTensor<double>(t[0],eps,tt));
+			addends.push_back(GenTensor<double>(t[1],eps,tt));
+			addends.push_back(GenTensor<double>(t[2],eps,tt));
 
-		print(ok(is_small(norm,eps)),"reduce",tt,norm);
-		if (!is_small(norm,eps)) nerror++;
+			GenTensor<double> result=reduce(addends,eps,true);
+			Tensor<double> tresult=t[0]+t[1]+t[2];
+
+			norm=(tresult-result.full_tensor_copy()).normf();
+
+			print(ok(is_small(norm,eps)),"reduce",tt,norm);
+			if (!is_small(norm,eps)) nerror++;
+		}
 	}
 
 	print("all done\n");

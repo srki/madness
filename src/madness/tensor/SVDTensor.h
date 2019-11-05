@@ -89,6 +89,11 @@ public:
 	/// following Alg. 5.1 of HMT 2011
 	static SVDTensor compute_svd_from_range(const Tensor<T>& range, const Tensor<T>& matrix);
 
+	/// compute an SVD from a given matrix and its range
+
+	/// following Alg. 5.1 of HMT 2011
+	void recompute_from_range(const Tensor<T>& range);
+
 
 	/// concatenate all arguments into a single SRConf (i.e. adding them all up)
 	static SVDTensor<T> concatenate(const std::list<SVDTensor<T> >& addends) {
@@ -126,8 +131,6 @@ public:
 
 	}
 
-
-
 	SVDTensor<T>& emul(const SVDTensor<T>& other) {
 		const SRConf<T>& base=other;
 		SRConf<T>::emul(base);
@@ -145,6 +148,12 @@ public:
 
 	void orthonormalize(const double& thresh);
 
+	void orthonormalize_random(const double& thresh);
+
+	void truncate_svd(const double& thresh);
+
+	static std::string reduction_algorithm();
+	static void set_reduction_algorithm(const std::string alg);
 
 private:
 
@@ -167,9 +176,24 @@ public:
     		const SVDTensor<R>& t1, const SVDTensor<Q>& t2);
 
     friend SVDTensor<T> reduce(std::list<SVDTensor<T> >& addends, double eps) {
-    	SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
-    	result.divide_and_conquer_reduce(eps);
-    	return result;
+    	SVDTensor<T>& ref=addends.front();
+    	if (ref.reduction_algorithm()=="divide_conquer") {
+        	SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
+        	result.divide_and_conquer_reduce(eps);
+        	return result;
+    	} else if (ref.reduction_algorithm()=="full") {
+    		SVDTensor<T> tmp=SVDTensor<T>::concatenate(addends);
+    		Tensor<T> full=tmp.reconstruct();
+    		return SVDTensor<T>(full,eps);
+    	} else if (ref.reduction_algorithm()=="RMD") {
+    		SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
+    		result.orthonormalize_random(eps);
+    		return result;
+    	} else {
+    		MADNESS_EXCEPTION("unknown reduction algorithm in SVDTensor.h",1);
+    		return SVDTensor<T>();
+    	}
+
     }
 
     friend SVDTensor<T> copy(const SVDTensor<T>& rhs) {

@@ -914,7 +914,7 @@ GenTensor<T> reduce(std::list<GenTensor<T> >& addends, double eps, bool are_opti
 	if (addends.front().is_svd_tensor()) {
 		std::list<SVDTensor<T> > addends1;
 		for (auto a : addends) addends1.push_back(a.get_svdtensor());
-		return reduce(addends1,eps);
+		return reduce(addends1,eps*GenTensor<T>::facReduce());
 	}
 	// make error relative
 	eps=eps/addends.size();

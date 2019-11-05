@@ -15,8 +15,8 @@ Tensor<T> RandomizedMatrixDecomposition<T>::compute_range(const Tensor<T>& tenso
 	typedef typename Tensor<T>::scalar_type scalar_type;
 
 	// fast return if possible
-	Tensor<T> Q(0l,0l);
-	if (tensor.normf()<eps) return Q;
+	range=Tensor<T>(0l,0l);
+	if (tensor.normf()<eps) return range;
 
 	const Tensor<T> matrix=resize_to_matrix(tensor,vectordim);
 	const long m=matrix.dim(0);
@@ -24,12 +24,22 @@ Tensor<T> RandomizedMatrixDecomposition<T>::compute_range(const Tensor<T>& tenso
 
 	maxrank=std::min(maxrank,matrix.dim(0));
 
+	Y_former Yformer(matrix);
+	range=do_compute_range(Yformer,eps);
+	return range;
+}
+
+template<typename T>
+Tensor<T> RandomizedMatrixDecomposition<T>::do_compute_range(const Y_former& Yformer,
+			const double& eps) const {
+	Tensor<T> Q(0l,0l);
+
 	// random trial vectors (transpose for efficiency)
-	Tensor<T> omegaT(oversampling,n);
+	Tensor<T> omegaT(oversampling,Yformer.n());
 	omegaT.fillrandom();
 
 	// compute guess for the range
-	Tensor<T> Y=inner(matrix,omegaT,1,1);
+	Tensor<T> Y=Yformer(omegaT);
 
 	std::vector<scalar_type> columnnorm(Y.dim(0));
 	for (long i=0; i<Y.dim(0); ++i) columnnorm[i]=Y(i,_).normf();
@@ -42,13 +52,12 @@ Tensor<T> RandomizedMatrixDecomposition<T>::compute_range(const Tensor<T>& tenso
 		qr(Y,R);
 		Q=Y;
 	} else {
-		range=Q;
-		return range;
+		return Q;
 	}
 
 	while (not_complete) {
 		omegaT.fillrandom();
-		Y=inner(matrix,omegaT,1,1);
+		Y=Y=Yformer(omegaT);
 		Tensor<T> Y0=Y-inner(Q,inner(conj(Q),Y,0,0));
 
 		// check residual norm, exit if converged
@@ -59,7 +68,7 @@ Tensor<T> RandomizedMatrixDecomposition<T>::compute_range(const Tensor<T>& tenso
 
 
 		// concatenate the ranges
-		Tensor<T> Q0(m,Q.dim(1)+Y.dim(1));
+		Tensor<T> Q0(Yformer.m(),Q.dim(1)+Y.dim(1));
 		Q0(_,Slice(0,Q.dim(1)-1))=Q;
 		Q0(_,Slice(Q.dim(1),-1))=Y0;
 
@@ -68,12 +77,34 @@ Tensor<T> RandomizedMatrixDecomposition<T>::compute_range(const Tensor<T>& tenso
 		Q=Q0;
 
 		if (Q.dim(1)>maxrank) break;
-		if (Q.dim(1)==matrix.dim(0)) break;
-		if (Q.dim(1)>matrix.dim(0)) MADNESS_EXCEPTION("faulty QR step in randomized range finder",1);;
+		if (Q.dim(1)>Yformer.maxrank()) MADNESS_EXCEPTION("faulty QR step in randomized range finder",1);;
 
 	}
-	range=Q;
+	return Q;
+}
+
+template<typename T>
+Tensor<T> RandomizedMatrixDecomposition<T>::compute_range(const Tensor<T>& columnspace,
+		const Tensor<T>& rowspace, const double& eps) {
+	typedef typename Tensor<T>::scalar_type scalar_type;
+
+	// fast return if possible
+	Tensor<T> Q(0l,0l);
+	if (columnspace.size()==0) return Q;
+
+	MADNESS_ASSERT(columnspace.ndim()==2);
+	MADNESS_ASSERT(rowspace.ndim()==2);
+	MADNESS_ASSERT(columnspace.dim(0)==rowspace.dim(0));	// U_ri V_rj
+
+	const long r=columnspace.dim(0);	// current rank
+	if (r==0) return Q;
+
+	maxrank=std::min(maxrank,r);
+
+	Y_former Yformer(columnspace,rowspace);
+	range=do_compute_range(Yformer,eps);
 	return range;
+
 }
 
 
