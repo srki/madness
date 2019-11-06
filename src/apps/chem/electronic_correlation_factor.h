@@ -27,8 +27,8 @@ class CorrelationFactor {
 public:
 
     /// ctor, use negative gamma for linear correlation factor r12
-    CorrelationFactor(World& world) : world(world), _gamma(-1.0), dcut(1.e-10),
-        lo(1.e-10) {
+    CorrelationFactor(World& world) : world(world), _gamma(-1.0), dcut(1.e-6),
+        lo(1.e-6) {
     }
 
     /// ctor, use negative gamma for linear correlation factor r12
@@ -151,7 +151,7 @@ public:
 
     /// return the U1 term of the correlation function
     real_function_6d U1(const int axis) const {
-        U func(_gamma,axis,dcut);
+        U func(_gamma,axis,lo);
         const real_function_6d u1=real_factory_6d(world)
                 .functor(func).is_on_demand();
         return u1;
@@ -243,7 +243,8 @@ private:
         double operator()(const coord_6d& r) const {
             const double rr=r12(r);
             const coord_3d vr12{r[0]-r[3],r[1]-r[4],r[2]-r[5]};
-            const coord_3d N=unitvec(vr12);
+//            const coord_3d N=unitvec(vr12);
+            const coord_3d N=smoothed_unitvec(vr12,dcut);
             if (gamma>0.0) return -0.5*exp(-gamma*rr)*N[axis];
             MADNESS_EXCEPTION("no gamma in electronic corrfac::U1",1);
 //          const double rr=r12(r);
@@ -305,7 +306,26 @@ private:
         return r[axis]-r[axis+3];
     }
 
-
+	static coord_3d smoothed_unitvec(const coord_3d& xyz, double smoothing) {
+//        if (smoothing==0.0) smoothing=molecule.get_eprec();
+        // TODO:need to test this
+        // reduce the smoothing for the unitvector
+        //if (not (this->type()==None or this->type()==Two)) smoothing=sqrt(smoothing);
+        const double r=xyz.normf();
+        const double cutoff=smoothing;
+        if (r>cutoff) {
+            return 1.0/r*xyz;
+        } else {
+            const double xi=r/cutoff;
+            const double xi2=xi*xi;
+            const double xi3=xi*xi*xi;
+//            const double nu21=0.5+1./32.*(45.*xi - 50.*xi3 + 21.*xi*xi*xi*xi*xi);
+            const double nu22=0.5 + 1./64.*(105* xi - 175 *xi3 + 147* xi2*xi3 - 45* xi3*xi3*xi);
+//            const double nu40=0.5 + 1./128.*(225 *xi - 350 *xi3 + 189*xi2*xi3);
+            const double kk=2.*nu22-1.0;
+            return kk/r*xyz;
+        }
+	}
 };
 
 /// a class holding the electronic correlation factor for R12 theory
