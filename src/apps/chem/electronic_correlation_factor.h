@@ -78,106 +78,75 @@ public:
 
     /// apply Kutzelnigg's regularized potential to an orbital product
     real_function_6d apply_U(const real_function_3d& phi_i, const real_function_3d& phi_j,
-            const real_convolution_6d& op_mod, const bool symmetric=false) const {
-	  if(not op_mod.modified()) MADNESS_EXCEPTION("ElectronicCorrelationFactor::apply_U, op_mod must be in modified_NS form",1);
-	  const double thresh = FunctionDefaults<6>::get_thresh();
-	  const bool debug = false;
-	  if(symmetric) MADNESS_ASSERT((phi_i-phi_j).norm2() < FunctionDefaults<3>::get_thresh());
+    		const real_convolution_6d& op_mod, const bool symmetric=false) const {
+    	if(not op_mod.modified()) MADNESS_EXCEPTION("ElectronicCorrelationFactor::apply_U, op_mod must be in modified_NS form",1);
+    	const double thresh = FunctionDefaults<6>::get_thresh();
+    	const bool debug = false;
+    	if(symmetric) MADNESS_ASSERT((phi_i-phi_j).norm2() < FunctionDefaults<3>::get_thresh());
 
-//        if(world.rank()==0){
-//        	std::cout << "apply_U debug output:\n"
-//        			<< "lo is " << lo <<"\ndcut is " << dcut <<"\nbsh_thresh is " << bsh_thresh
-//        			<< "\ngamma is " << _gamma
-//        			<< "\n3D thresh in FunctionDefaults is " << FunctionDefaults<3>::get_thresh()
-//        			<< "\n6D thresh in FunctionDefaults is " << FunctionDefaults<6>::get_thresh()
-//        			<< "\neps is " << eps << "\nnorm of phi_i is " << phi_i.norm2() << "\nnorm of phi_j is " << phi_j.norm2()
-//        			<< std::endl;
-//        }
+    	real_function_6d result=real_factory_6d(world);
+    	for (int axis=0; axis<3; ++axis) {
+        	double wall0=wall_time();
+    		//if (world.rank()==0) print("working on axis",axis);
+    		real_derivative_3d D = free_space_derivative<double,3>(world, axis);
+    		const real_function_3d Di=(D(phi_i)).truncate();
+    		real_function_3d Dj;
+    		if(symmetric) Dj=madness::copy(Di);
+    		else Dj=(D(phi_j)).truncate();
 
-        real_function_6d result=real_factory_6d(world);
+    		real_function_6d u=U1(axis);
+    		double wall1=wall_time();
+    		printf("wall time in prep U %12.8f\n",wall1-wall0);
+    		wall0=wall1;
 
-        for (int axis=0; axis<3; ++axis) {
-            //if (world.rank()==0) print("working on axis",axis);
-            real_derivative_3d D = free_space_derivative<double,3>(world, axis);
-            const real_function_3d Di=(D(phi_i)).truncate();
-            real_function_3d Dj;
-            if(symmetric) Dj=madness::copy(Di);
-            else Dj=(D(phi_j)).truncate();
+    		real_function_6d tmp1=CompositeFactory<double,6,3>(world)
+                        		.g12(u).particle1(copy(Di)).particle2(copy(phi_j)).thresh(thresh);
+    		tmp1.fill_cuspy_tree(op_mod).truncate();
+    		wall1=wall_time();
+    		printf("wall time in fill_tree 1 %12.8f\n",wall1-wall0);
+    		wall0=wall1;
 
-            real_function_6d u=U1(axis);
-//            u.fill_tree(op_mod);
-//            plot_plane(world,u,"u");
-//            std::cout<<"plotted u\n";
+    		real_function_6d tmp2;
+    		if(symmetric) tmp2 = -1.0*swap_particles(tmp1);
+    		else{
+    			tmp2=CompositeFactory<double,6,3>(world)
+                                    		.g12(u).particle1(copy(phi_i)).particle2(copy(Dj)).thresh(thresh);
+    			tmp2.fill_cuspy_tree(op_mod).truncate();
+    		}
+    		wall1=wall_time();
+    		printf("wall time in fill_tree 2 %12.8f\n",wall1-wall0);
+    		wall0=wall1;
 
-//            if(world.rank()==0){
-//            	std::cout << "apply_U debug output:\n"
-//            			<< "Norm of Di " << Di.norm2()
-//            			<< "\nNorm of Dj " << Dj.norm2()
-//            			<< "\nNorm if u " << u.norm2()
-//            			<< std::endl;
-//            }
+    		result=result+(tmp1-tmp2).truncate();
+    		wall1=wall_time();
+    		printf("wall time in add %12.8f\n",wall1-wall0);
+    		wall0=wall1;
 
-            real_function_6d tmp1=CompositeFactory<double,6,3>(world)
-                        .g12(u).particle1(copy(Di)).particle2(copy(phi_j)).thresh(thresh);
-            tmp1.fill_cuspy_tree(op_mod).truncate();
 
-            real_function_6d tmp2;
-            if(symmetric) tmp2 = -1.0*swap_particles(tmp1);
-            else{
-            tmp2=CompositeFactory<double,6,3>(world)
-                                    .g12(u).particle1(copy(phi_i)).particle2(copy(Dj)).thresh(thresh);
-            tmp2.fill_cuspy_tree(op_mod).truncate();
-            }
-            // if (world.rank()==0) print("done with fill_tree");
+    		tmp1.clear();
+    		tmp2.clear();
+    		world.gop.fence();
+    		result.truncate().reduce_rank();
 
-           // plot_plane(world,tmp1,"tmp1");
-           // plot_plane(world,tmp2,"tmp2");
+    	}
+		double wall0=wall_time();
 
-//            if(world.rank()==0){
-//            	std::cout << "apply_U debug output:\n"
-//            			<< "Norm of tmp1 " << tmp1.norm2()
-//            			<< "\nNorm of tmp2"<< tmp2.norm2()
-//            			<< std::endl;
-//            }
+    	// include the purely local potential that (partially) cancels 1/r12
+    	if (_gamma>0.0) {
+    		fg_ func(_gamma,dcut);
+    		real_function_6d fg3=real_factory_6d(world).functor(func).is_on_demand();
+    		real_function_6d mul=CompositeFactory<double,6,3>(world)
+                                		.g12(fg3).particle1(copy(phi_i)).particle2(copy(phi_j)).thresh(thresh);;
+    		mul.fill_cuspy_tree(op_mod).truncate();
+    		// mul.print_size("mul");
 
-            result=result+(tmp1-tmp2).truncate();
+    		result=(result+mul).truncate().reduce_rank();
+    	}
+		double wall1=wall_time();
+		printf("wall time in U2 %12.8f\n",wall1-wall0);
 
-//            if(world.rank()==0){
-//            	std::cout << "apply_U debug output:\n"
-//            			<< "Norm of result + tmp1 - tmp2 " << result.norm2()
-//            			<< std::endl;
-//            }
-
-            tmp1.clear();
-            tmp2.clear();
-            world.gop.fence();
-            result.truncate().reduce_rank();
-
-//            if(world.rank()==0){
-//            	std::cout << "apply_U debug output:\n"
-//            			<< "Norm if result after truncate " << result.norm2()
-//            			<< std::endl;
-//            }
-
-            //if (world.rank()==0) printf("done with multiplication with U at ime %.1f\n",wall_time());
-           // result.print_size("result");
-        }
-
-//        load_balance(result,true);
-
-        // include the purely local potential that (partially) cancels 1/r12
-        if (_gamma>0.0) {
-            fg_ func(_gamma,dcut);
-            real_function_6d fg3=real_factory_6d(world).functor(func).is_on_demand();
-            real_function_6d mul=CompositeFactory<double,6,3>(world)
-                                .g12(fg3).particle1(copy(phi_i)).particle2(copy(phi_j)).thresh(thresh);;
-            mul.fill_cuspy_tree(op_mod).truncate();
-           // mul.print_size("mul");
-
-            result=(result+mul).truncate().reduce_rank();
-        }
-        if(debug) result.print_size("Ue|ij>");
-        return result;
+    	if(debug) result.print_size("Ue|ij>");
+    	return result;
     }
 
     /// return the U1 term of the correlation function
