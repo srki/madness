@@ -1343,81 +1343,59 @@ real_function_6d MP2::nemo0_on_demand(const int i, const int j) const {
 real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 		const real_function_6d& f, const int i, const int j) const {
 
-	real_function_6d vphi;
-
 	START_TIMER(world);
-	if (0) {
-		//            if (hf->nemo_calc.nuclear_correlation->type()==NuclearCorrelationFactor::None) {
-		real_function_3d v_total = hf->get_nuclear_potential()
-									+ hf->get_coulomb_potential();
+	// the purely local part: Coulomb and U2
+	real_function_3d v_local = hf->get_coulomb_potential()
+								+ hf->nemo_calc.nuclear_correlation->U2();
 
-		const double eps = zeroth_order_energy(i, j);
-		real_convolution_6d op_mod = BSHOperator<6>(world, sqrt(-2 * eps), lo,
-				bsh_eps);
-		op_mod.modified() = true;
+	v_local.print_size("vlocal");
 
-		vphi =
-				CompositeFactory<double, 6, 3>(world).ket(copy(f)).V_for_particle1(
-						copy(v_total)).V_for_particle2(copy(v_total));
+	// screen the construction of Vphi: do only what is needed to
+	// get an accurate result of the BSH operator
+	const double eps = zeroth_order_energy(i, j);
+	real_convolution_6d op_mod = BSHOperator<6>(world, sqrt(-2 * eps), lo, bsh_eps);
+	op_mod.modified() = true;
+	real_function_6d vphi = CompositeFactory<double, 6, 3>(world).ket(copy(f)).V_for_particle1(
+			copy(v_local)).V_for_particle2(copy(v_local));
+	vphi.fill_tree(op_mod);
+	vphi.print_size("vphi: local parts");
 
-		// make the tree
-		vphi.fill_tree(op_mod).truncate();
-		vphi.print_size("(V_nuc + J1 + J2) |ket>:  made V tree");
-	} else {
+	// the part with the derivative operators: U1
+	const std::vector<real_function_6d> Drhs = truncate(grad(f));
+	print_size(world,Drhs,"Drhs");
 
-		// the purely local part: Coulomb and U2
-		real_function_3d v_local = hf->get_coulomb_potential()
-									+ hf->nemo_calc.nuclear_correlation->U2();
-
-		v_local.print_size("vlocal");
-		f.print_size("u");
-
-		// screen the construction of Vphi: do only what is needed to
-		// get an accurate result of the BSH operator
-		const double eps = zeroth_order_energy(i, j);
-		real_convolution_6d op_mod = BSHOperator<6>(world, sqrt(-2 * eps), lo,
-				bsh_eps);
-		op_mod.modified() = true;
-		vphi = CompositeFactory<double, 6, 3>(world).ket(copy(f)).V_for_particle1(
-				copy(v_local)).V_for_particle2(copy(v_local));
-		vphi.fill_tree(op_mod);
-		asymmetry(vphi, "Vphi");
-		vphi.print_size("vphi: local parts");
-
-		// the part with the derivative operators: U1
-		for (int axis = 0; axis < 6; ++axis) {
-			real_derivative_6d D = free_space_derivative<double, 6>(world,
-					axis);
-			const real_function_6d Drhs = D(f).truncate();
-
-			// note integer arithmetic
-			if (world.rank() == 0)
-				print("axis, axis^%3, axis/3+1", axis, axis % 3, axis / 3 + 1);
-			const real_function_3d U1_axis =
-					hf->nemo_calc.nuclear_correlation->U1(axis % 3);
-			//                    real_function_6d x=multiply(copy(Drhs),copy(U1_axis),axis/3+1).truncate();
-
-			double tight_thresh = std::min(FunctionDefaults<6>::get_thresh(), 1.e-4);
-			real_function_6d x;
-			if (axis / 3 + 1 == 1) {
-				x =CompositeFactory<double, 6, 3>(world).ket(Drhs)
-											.V_for_particle1(copy(U1_axis))
-											.thresh(tight_thresh);
-
-			} else if (axis / 3 + 1 == 2) {
-				x =CompositeFactory<double, 6, 3>(world).ket(Drhs)
-											.V_for_particle2(copy(U1_axis))
-											.thresh(tight_thresh);
-			}
-			x.fill_tree(op_mod);
-			x.set_thresh(FunctionDefaults<6>::get_thresh());
-			vphi += x;
-			vphi.truncate().reduce_rank();
-
-		}
-		vphi.print_size("(U_nuc + J) |ket>:  made V tree");
-		asymmetry(vphi, "U+J");
+	std::vector<real_function_3d> U1_6d;
+	for (int axis = 0; axis < 6; ++axis) {
+		// note integer arithmetic
+//		if (world.rank() == 0) print("axis, axis^%3, axis/3+1", axis, axis % 3, axis / 3 + 1);
+		U1_6d.push_back(copy(hf->nemo_calc.nuclear_correlation->U1(axis % 3)));
 	}
+	print_size(world,U1_6d,"U1_6d");
+
+	double tight_thresh = std::min(FunctionDefaults<6>::get_thresh(), 1.e-4);
+	std::vector<real_function_6d> x(6);
+	for (int axis = 0; axis < 6; ++axis) {
+
+		if (axis / 3 + 1 == 1) {
+			x[axis] =CompositeFactory<double, 6, 3>(world).ket(Drhs[axis])
+						.V_for_particle1(U1_6d[axis]).thresh(tight_thresh);
+
+		} else if (axis / 3 + 1 == 2) {
+			x[axis] =CompositeFactory<double, 6, 3>(world).ket(Drhs[axis])
+						.V_for_particle2(U1_6d[axis]).thresh(tight_thresh);
+		}
+	}
+	world.gop.fence();
+	for (auto xx : x) xx.fill_tree(op_mod,false);
+//	x.fill_tree(op_mod);
+	world.gop.fence();
+	print_size(world,x,"x after fill_tree");
+
+	set_thresh(world,x,FunctionDefaults<6>::get_thresh());
+	for (auto xx : x) vphi += xx;
+	vphi.truncate().reduce_rank();
+
+	vphi.print_size("(U_nuc + J) |ket>:  made V tree");
 	END_TIMER(world, "apply (U + J) |ket>");
 
 	// and the exchange
