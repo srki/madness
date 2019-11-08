@@ -1336,6 +1336,7 @@ real_function_6d MP2::nemo0_on_demand(const int i, const int j) const {
 			copy(hf->nemo(j)));
 }
 
+
 /// multiply the given function with the 0th order Hamiltonian, exluding the 0th order energy
 
 /// @param[in]  f   the function we apply H^0 on
@@ -1371,6 +1372,7 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 		U1_6d.push_back(copy(hf->nemo_calc.nuclear_correlation->U1(axis % 3)));
 	}
 	print_size(world,U1_6d,"U1_6d");
+
 
 	double tight_thresh = std::min(FunctionDefaults<6>::get_thresh(), 1.e-4);
 	std::vector<real_function_6d> x(6);

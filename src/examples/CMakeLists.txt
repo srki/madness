@@ -14,5 +14,15 @@ endif()
 # Create executables for example applications
 foreach(example ${EXAMPLE_SOURCES})
   add_executable(${example} ${example}.cc)
-  target_link_libraries(${example} MADchem ${DISABLEPIE_LINKER_FLAG})
+  target_link_libraries(${example} MADchem  ${DISABLEPIE_LINKER_FLAG})
+
+  add_custom_command(TARGET ${example}
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND}
+      -Dlocal_dir="${PROJECT_SOURCE_DIR}"
+      -Doutput_dir="${PROJECT_BINARY_DIR}/src"
+      -P "${PROJECT_SOURCE_DIR}/cmake/git_version.cmake"
+  )
+  # for finding generated gitversion.h
+  target_include_directories(${example} PRIVATE ${CMAKE_BINARY_DIR}/src)
 endforeach()

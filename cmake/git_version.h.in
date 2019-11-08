@@ -1,0 +1,4 @@
+#pragma once
+
+#define MADNESS_GITREVISION "@_build_version@"
+#define MADNESS_BUILD_TIMESTAMP "@_time_stamp@"

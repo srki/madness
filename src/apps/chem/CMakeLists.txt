@@ -68,3 +68,14 @@ if(ENABLE_UNITTESTS)
   endforeach()
   
 endif()
+
+ add_custom_command(TARGET MADchem
+   PRE_BUILD
+   COMMAND ${CMAKE_COMMAND}
+     -Dlocal_dir="${PROJECT_SOURCE_DIR}"
+     -Doutput_dir="${PROJECT_BINARY_DIR}/src"
+     -P "${PROJECT_SOURCE_DIR}/cmake/git_version.cmake"
+ )
+  
+ # for finding generated gitversion.h
+ target_include_directories(MADchem PRIVATE ${CMAKE_BINARY_DIR}/src)

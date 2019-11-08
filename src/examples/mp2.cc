@@ -41,6 +41,7 @@
 //#define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include <madness/world/info.h>
 #include <chem/mp2.h>
+#include <git_version.h>
 
 using namespace madness;
 
@@ -52,20 +53,18 @@ int main(int argc, char** argv) {
     startup(world,argc,argv);
     std::cout.precision(6);
 
+//    print("git_version",git_version());
 #ifdef MADNESS_GITREVISION
-    const  char* gitrev =  MADNESS_GITREVISION;
-    const std::string gitrevision(gitrev);
+    const std::string gitrevision(MADNESS_GITREVISION);
+    const std::string timestamp(MADNESS_BUILD_TIMESTAMP);
     if (world.rank()==0) {
-        print("    main() git revision ...",gitrevision);
+        print("    git revision ...         ",gitrevision);
+    	print("    mp2.cc compiled at ...   ",__TIME__," on ",__DATE__);
     }
 #endif
 
-    if (world.rank()==0) {
-    	print("           git revision ...", info::git_commit());
-    }
 
     if (world.rank()==0) {
-    	print("main() in mp2.cc compiled at ",__TIME__," on ",__DATE__);
 #ifdef MADNESS_HAS_GOOGLE_PERF_MINIMAL
     	print("using gperftools, clearing memory at each fence()");
 #endif
