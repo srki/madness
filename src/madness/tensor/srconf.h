@@ -808,25 +808,20 @@ protected:
 		SRConf<T> transform(const Tensor<T>& c) const {
 
 			// fast return if possible
-			if (this->has_no_data() or rank()==0) SRConf<T>(ndim(),dims(),nci_left);
+			if (this->has_no_data() or rank()==0) return SRConf<T>(ndim(),dims(),nci_left);
 
-			// copying shrinks the vectors to (r,k,k,..)
-			SRConf<T> result=copy(*this);
+			// transpose both singular vectors from U(r,i,j,k) to U(i,j,k,r)
+			// and run the contraction as in tensor: U(i,j,k,r) t(i,i') = U(j,k,r,i')
+			// and so on, yielding U(r,i',j',k')
+			Tensor<T> left=copy(vector_[0].cycledim(-1,0,-1));
+			Tensor<T> right=copy(vector_[1].cycledim(-1,0,-1));
 
-			// make sure this is not flattened
-			MADNESS_ASSERT(this->has_structure());
+	        for (long i=0; i<nci_left; ++i) left = inner(left,c,0,0);
+	        for (long i=nci_left; i<ndim(); ++i) right = inner(right,c,0,0);
 
-			// these two loops go over all physical dimensions (dim = dim_eff * merged_dim)
-			for (unsigned int idim=0; idim<2; idim++) {
-				for (unsigned int jdim=1; jdim<this->ref_vector(idim).ndim(); jdim++) {
+	        SRConf<T> result(ndim(),dims(),this->nci_left);
+	        result.set_vectors_and_weights(copy(weights_),left,right);
 
-					// note: tricky ordering (jdim is missing): this is actually correct!
-					// note: no slicing necessary, since we've copied this to result (incl shrinking)
-//					result.refVector_struct(idim)=madness::inner(result.refVector_struct(idim),c,1,0);
-					result.ref_vector(idim)=madness::inner(result.ref_vector(idim),c,1,0);
-
-				}
-			}
             MADNESS_ASSERT(result.has_structure());
 			return result;
 		}
