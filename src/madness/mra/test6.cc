@@ -192,6 +192,48 @@ int test_hartree_product(World& world, const long& k, const double thresh) {
 	return nerror;
 }
 
+int test_Vphi_op(World& world, const long& k, const double thresh) {
+    print("entering Vphi_op f(1,2)*g(1)");
+    int nerror=0;
+    bool good;
+
+    real_function_6d f12=TwoElectronFactory(world).f12().thresh(thresh).gamma(1.0).k(k+1);
+
+
+    const real_function_3d phi=real_factory_3d(world).f(gauss_3d);
+    const real_function_3d phi2=phi*phi;
+
+    real_function_6d fii=CompositeFactory<double,6,3>(world)
+    	    	.particle1(copy(phi))
+    	    	.particle2(copy(phi))
+    	    	.g12(f12);
+
+    fii.fill_tree();
+	save_function(world,fii,"fii");
+
+	real_function_6d bra =
+			CompositeFactory<double, 6, 3>(world)
+				.particle1(copy(phi)).particle2(copy(phi));
+
+	const double a = inner(fii,bra);
+	print("<ii | f12 | ii> 6d: ",a);
+
+	const double a1 = inner(phi,phi);
+	print("< i i | i i >", a1*a1);
+
+	// make all the operators that we need
+	real_convolution_3d slaterf12 = SlaterF12Operator(world, 1.0, 1.e-5, 1.e-5);
+
+	real_function_3d fii1=slaterf12(phi2);
+	double b=inner(phi2,fii1);
+	double b1=inner(phi2,phi2);
+	print("<ii | f12 | ii> 3d: ",b);
+	print("<ii | | ii> 3d:     ",b1);
+
+	print("error",a-b);
+	return 1;
+}
+
 /// test f(1,2)*g(1)
 int test_multiply(World& world, const long& k, const double thresh) {
 
@@ -667,7 +709,7 @@ int main(int argc, char**argv) {
         }
     }
 
-    FunctionDefaults<3>::set_thresh(thresh);
+    FunctionDefaults<3>::set_thresh(thresh*0.01);
     FunctionDefaults<3>::set_k(k);
     FunctionDefaults<3>::set_cubic_cell(-L/2,L/2);
     FunctionDefaults<6>::set_thresh(thresh);
@@ -693,16 +735,18 @@ int main(int argc, char**argv) {
     norm=phi2.norm2();
     if (world.rank()==0) printf("phi2.norm2()  %12.8f\n",norm);
 
-    test(world,k,thresh);
-    error+=test_hartree_product(world,k,thresh);
-    error+=test_convolution(world,k,thresh);
-    error+=test_multiply(world,k,thresh);
-    error+=test_add(world,k,thresh);
-    error+=test_exchange(world,k,thresh);
-    error+=test_inner(world,k,thresh);
+//    test(world,k,thresh);
+//    error+=test_hartree_product(world,k,thresh);
+//    error+=test_convolution(world,k,thresh);
+    error+=test_Vphi_op(world,k,thresh);
+//    error+=test_multiply(world,k,thresh);
+//    error+=test_add(world,k,thresh);
+//    error+=test_exchange(world,k,thresh);
+//    error+=test_inner(world,k,thresh);
 
 
     print(ok(error==0),error,"finished test suite\n");
+    WorldProfile::print(world);
 
     world.gop.fence();
     finalize();

@@ -2951,6 +2951,32 @@ namespace madness {
         *hi = work.normf();
     }
 
+    template <typename T, std::size_t NDIM>
+    void FunctionImpl<T,NDIM>::tnorm(const GenTensor<T>& t, double* lo, double* hi) const {
+        GenTensor<T> tlo = t(cdata.sh);
+        double lo1 = tlo.normf();
+        double tmp=t.normf();
+        *lo = lo1;
+        *hi = sqrt(tmp*tmp - lo1*lo1);
+    }
+
+    template <typename T, std::size_t NDIM>
+    void FunctionImpl<T,NDIM>::tnorm(const SVDTensor<T>& t, double* lo, double* hi,
+    		const int particle) const {
+    	*lo=0.0;
+    	*hi=0.0;
+    	if (t.rank()==0) return;
+    	const tensorT vec=t.flat_vector(particle-1);
+    	for (long i=0; i<t.rank(); ++i) {
+    		double lo1,hi1;
+    		tensorT c=vec(Slice(i,i),_).reshape(cdata.vk);
+    		tnorm(c, &lo1, &hi1);        // note we use g instead of h, since g is 3D
+    		*lo+=lo1*t.weights(i);
+    		*hi+=hi1*t.weights(i);
+		}
+    }
+
+
     namespace detail {
         template <typename A, typename B>
         struct noop {
