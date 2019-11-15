@@ -3963,7 +3963,13 @@ namespace madness {
         	tensorT eri_coeffs(const keyT& key) const {
         		MADNESS_ASSERT(have_eri());
         		PROFILE_BLOCK(eri_coeffs);
-        		return eri->get_functor()->coeff(key).full_tensor();
+    			if (eri->get_functor()->provides_coeff()) {
+    				return eri->get_functor()->coeff(key).full_tensor();
+    			} else {
+    				tensorT val_eri(eri->cdata.vk);
+    				eri->fcube(key,*(eri->get_functor()),eri->cdata.quad_x,val_eri);
+    				return eri->values2coeffs(key,val_eri);
+    			}
         	}
 
         	/// the error is computed from the d coefficients of the constituent functions
