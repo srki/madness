@@ -2953,11 +2953,11 @@ namespace madness {
 
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::tnorm(const GenTensor<T>& t, double* lo, double* hi) const {
-        GenTensor<T> tlo = t(cdata.sh);
-        double lo1 = tlo.normf();
-        double tmp=t.normf();
-        *lo = lo1;
-        *hi = sqrt(tmp*tmp - lo1*lo1);
+		coeffT shalf=t(cdata.sh);
+		*lo=shalf.normf();
+		coeffT sfull=copy(t);
+		sfull(cdata.sh)-=shalf;
+		*hi=sfull.normf();
     }
 
     template <typename T, std::size_t NDIM>

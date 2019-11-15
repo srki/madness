@@ -893,7 +893,7 @@ namespace madness {
         Timer timer_filter;
         Timer timer_compress_svd;
         Timer timer_target_driven;
-        bool do_new;
+        bool do_new=false;
         AtomicInt small;
         AtomicInt large;
 
@@ -3707,10 +3707,10 @@ namespace madness {
         	const implT* impl;
         	const FunctionImpl<T,LDIM>* gimpl;
         	coeffT val_lhs, coeff_lhs;
-        	double error;
-        	double lo, hi, lo1=0.0, hi1=0.0, lo2=0.0, hi2=0.0;
+        	double error=0.0;
+        	double lo=0.0, hi=0.0, lo1=0.0, hi1=0.0, lo2=0.0, hi2=0.0;
 
-        	pointwise_multiplier() :gimpl(0), impl(0) {}
+        	pointwise_multiplier() :gimpl(0), impl(0){}
         	pointwise_multiplier(const Key<NDIM> key, const coeffT& clhs, implT* i, const FunctionImpl<T,LDIM>* gimpl)
         		: impl(i), gimpl(gimpl), coeff_lhs(clhs) {
         		val_lhs=impl->coeffs2values(key,coeff_lhs);
@@ -3728,8 +3728,6 @@ namespace madness {
         	}
 
         	/// multiply values of rhs and lhs, result on rhs, rhs and lhs are of the same dimensions
-
-        	/// @return		the error computed by tnorm
         	coeffT operator()(const Key<NDIM> key, const coeffT& coeff_rhs) {
         		double rlo, rhi;
         		impl->tnorm(coeff_rhs,&rlo,&rhi);
@@ -3741,22 +3739,53 @@ namespace madness {
         	}
 
         	/// multiply values of rhs and lhs, result on rhs, rhs and lhs are of the same dimensions
-
-        	/// @return		the error computed by tnorm
         	tensorT operator()(const Key<NDIM> key, const tensorT& coeff_rhs) {
-        		double rlo, rhi;
-        		impl->tnorm(coeff_rhs,&rlo,&rhi);
-        		error = hi*rlo + rhi*lo + rhi*hi;
-        		tensorT val_rhs=impl->coeffs2values(key, coeff_rhs);
-        		val_rhs.emul(val_lhs.full_tensor_copy());
-        		return impl->values2coeffs(key,val_rhs);
+
+				MADNESS_ASSERT(coeff_rhs.dim(0)==coeff_lhs.dim(0));
+
+				// the tnorm estimate is not tight enough to be efficient, better use oversampling
+				bool use_tnorm=false;
+        		if (use_tnorm) {
+					double rlo, rhi;
+					impl->tnorm(coeff_rhs,&rlo,&rhi);
+					error = hi*rlo + rhi*lo + rhi*hi;
+					tensorT val_rhs=impl->coeffs2values(key, coeff_rhs);
+					val_rhs.emul(val_lhs.full_tensor_copy());
+					return impl->values2coeffs(key,val_rhs);
+        		} else {	// use quadrature of order k+1
+
+    	            auto cdata=FunctionCommonData<T,NDIM>::get(impl->get_k()+1);		// npt=k+1
+
+    	            // coeffs2values for rhs
+		            tensorT coeff1(cdata.vk);
+		            coeff1(impl->cdata.s0)=coeff_rhs;
+		            double scale = pow(2.0,0.5*NDIM*key.level())/sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+		            tensorT val_rhs_k1=transform(coeff1,cdata.quad_phit).scale(scale);
+
+		            // coeffs2values for lhs
+		            tensorT coeff_lhs_k1(cdata.vk);
+		            coeff_lhs_k1(impl->cdata.s0)=coeff_lhs.full_tensor_copy();
+		            tensorT val_lhs_k1=transform(coeff_lhs_k1,cdata.quad_phit).scale(scale);
+
+		            // multiply
+		            val_lhs_k1.emul(val_rhs_k1);
+
+                    // values2coeffs
+		            tensorT result1(cdata.vq,false), work(cdata.vq,false);
+                    double scale1 = pow(0.5,0.5*NDIM*key.level())*sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+                    fast_transform(val_lhs_k1,cdata.quad_phiw,result1,work).scale(scale1);
+
+                    // extract coeffs up to k
+                    tensorT result=copy(result1(impl->cdata.s0));
+                    result1(impl->cdata.s0)=0.0;
+                    error=result1.normf();
+                    return result;
+
+        		}
 
         	}
 
         	/// multiply values of rhs and lhs, result on rhs, rhs and lhs are of differnet dimensions
-
-
-        	/// @return		the error computed by tnorm
         	coeffT operator()(const Key<NDIM> key, const tensorT& coeff_rhs, const int particle) {
                 Key<LDIM> key1, key2;
                 key.break_apart(key1,key2);
@@ -3836,7 +3865,7 @@ namespace madness {
         			// this means that we only construct the boxes which are leaf boxes from the other function in the leaf_op
         			if(leaf_op.pre_screening(key)){
         				// construct sum_coefficients, insert them and leave
-        				auto [ sum_coeff, error]=make_sum_coeffs(key);
+        				auto [sum_coeff, error]=make_sum_coeffs(key);
         				result->get_coeffs().replace(key,nodeT(sum_coeff,false));
         				return std::pair<bool,coeffT> (true,coeffT());
         			}else{
@@ -3946,15 +3975,16 @@ namespace madness {
         	/// the first term is what we compute, the second term is estimated by tnorm (in another function),
         	/// the third to last terms are estimated in this function by e.g.: Qn(f)Pn(g) < ||Qn(f)|| ||Pn(g)||
         	double compute_error_from_inaccurate_refinement(const coeffT& cket_NS, const coeffT& cpot1_NS,
-        			const coeffT& cpot2_NS, const coeffT& ceri) const {
+        			const coeffT& cpot2_NS, const tensorT& ceri, bool printme) const {
         		double error = 0.0;
         		PROFILE_BLOCK(compute_error);
         		double dnorm_ket, snorm_ket;
         		{
 					coeffT s_coeffs=cket_NS(result->cdata.s0);
 					snorm_ket=s_coeffs.normf();
-					double d=cket_NS.normf();
-					dnorm_ket=sqrt(d*d - snorm_ket*snorm_ket);
+					coeffT d_coeffs=copy(cket_NS);
+					d_coeffs(result->cdata.s0)-=s_coeffs;
+					dnorm_ket=d_coeffs.normf();
         		}
 
         		if (have_v1()) {
@@ -3974,14 +4004,14 @@ namespace madness {
         			error+=snorm*dnorm_ket + dnorm*snorm_ket + dnorm*dnorm_ket;
         		}
         		if (have_eri()) {
-        			coeffT s_coeffs=ceri(result->cdata.s0);
+        			tensorT s_coeffs=ceri(result->cdata.s0);
         			double snorm=s_coeffs.normf();
-        			double d=ceri.normf();
-        			double dnorm=sqrt(d*d - snorm*snorm);
+        			tensorT d=copy(ceri);
+        			d(result->cdata.s0)=0.0;
+        			double dnorm=d.normf();
 
         			error+=snorm*dnorm_ket + dnorm*snorm_ket + dnorm*dnorm_ket;
         		}
-
         		return error;
         	}
 
@@ -3997,15 +4027,20 @@ namespace madness {
         				: outer(iap1.coeff(key1),iap2.coeff(key2),result->get_tensor_args());
         		const coeffT cpot1_NS = (have_v1()) ? iav1.coeff(key1) : coeffT();
         		const coeffT cpot2_NS = (have_v2()) ? iav2.coeff(key2) : coeffT();
-        		const coeffT ceri_NS = (have_eri()) ? eri_coeffs(key) : coeffT();
+        		const tensorT ceri_NS = (have_eri()) ? eri_coeffs(key) : tensorT();
+
+        		bool printme=(int(key.translation()[0])==int(std::pow(key.level(),2)/2)) and
+        				(int(key.translation()[1])==int(std::pow(key.level(),2)/2)) and
+						(int(key.translation()[2])==int(std::pow(key.level(),2)/2));
+        		printme=false;
 
         		// compute first part of the total error
-//        		double error=compute_error_from_inaccurate_refinement(coeff_ket_NS, cpot1_NS,
-//        			cpot2_NS, ceri_NS);
-        		double error=0.0;
+        		double refine_error=compute_error_from_inaccurate_refinement(coeff_ket_NS, cpot1_NS,
+        			cpot2_NS, ceri_NS,printme);
+        		double error=refine_error;
 
         		// prepare the multiplication
-        		const coeffT coeff_ket=coeff_ket_NS(result->get_cdata().s0);
+        		const coeffT coeff_ket=copy(coeff_ket_NS(result->get_cdata().s0));
         		pointwise_multiplier<LDIM> pm;
         		if (have_v1()) pm=pointwise_multiplier<LDIM>(key,coeff_ket,result,iav1.get_impl());
         		else if (have_v2()) {
@@ -4029,13 +4064,17 @@ namespace madness {
 
         		if (have_eri()) {
         			tensorT result1=cresult.full_tensor_copy();
-        			result1+=pm(key,copy(eri_coeffs(key)(result->cdata.s0)));
+        			result1+=pm(key,copy(ceri_NS(result->cdata.s0)));
         			cresult=coeffT(result1,result->get_tensor_args());
         			error+=pm.error;
         		}
         		if ((not have_v1()) and (not have_v2()) and (not have_eri())) {
         			cresult=coeff_ket;
         		}
+        		if (printme) {
+        			print("key,error: refine,tnorm,total",key,refine_error,error-refine_error,error);
+        		}
+
         		return std::make_pair(cresult,error);
         	}
 

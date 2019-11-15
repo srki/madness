@@ -210,6 +210,8 @@ int test_Vphi_op(World& world, const long& k, const double thresh) {
 
     fii.fill_tree();
 	save_function(world,fii,"fii");
+	fii.truncate();
+	fii.print_size("fii truncated");
 
 	real_function_6d bra =
 			CompositeFactory<double, 6, 3>(world)
@@ -578,6 +580,15 @@ int test_replicate(World& world, const long& k, const double thresh) {
     phi.replicate();
     phi.get_pmap()->print_data_sizes(world,"replicated");
     map->print_data_sizes(world,"after replication");
+
+    phi.compress();
+    phi.reconstruct();
+    double norm=phi.norm2();
+    print("norm",norm);
+
+    double norm1=phi.norm2();
+    print("norm",norm1);
+
     phi.distribute(map);
     map->print_data_sizes(world,"after distribution");
     return 0;
@@ -737,16 +748,8 @@ int main(int argc, char**argv) {
 
 
     int error=0;
-//
-//    real_function_3d phi=real_factory_3d(world).f(gauss_3d);
-//    double norm=phi.norm2();
-//    if (world.rank()==0) printf("phi.norm2()   %12.8f\n",norm);
-//
-//    real_function_3d phi2=2.0*phi*phi;
-//    norm=phi2.norm2();
-//    if (world.rank()==0) printf("phi2.norm2()  %12.8f\n",norm);
 
-    test(world,k,thresh);
+//    test(world,k,thresh);
 //    error+=test_hartree_product(world,k,thresh);
 //    error+=test_convolution(world,k,thresh);
     error+=test_Vphi_op(world,k,thresh);
@@ -754,7 +757,7 @@ int main(int argc, char**argv) {
 //    error+=test_add(world,k,thresh);
 //    error+=test_exchange(world,k,thresh);
 //    error+=test_inner(world,k,thresh);
-    error+=test_replicate(world,k,thresh);
+//    error+=test_replicate(world,k,thresh);
 
     print(ok(error==0),error,"finished test suite\n");
     WorldProfile::print(world);

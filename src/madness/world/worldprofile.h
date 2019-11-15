@@ -52,7 +52,11 @@ namespace madness {
         T value, max, min, sum;  // local value, parallel max, min, sum
         ProcessID pmax, pmin;    // processor with max, min values
 
-        ProfileStat() = default;
+        //ProfileStat() = default;
+        ProfileStat() {clear();}
+        template <typename Archive>
+        void serialize(Archive& ar) {ar & value & max & min & sum & pmax & pmin;}
+
 
         /// Copies local stats into parallel stats in prep for global reduction
         void init_par_stats(ProcessID me) {
@@ -195,11 +199,11 @@ namespace madness {
     madness::WorldProfileObj name(__name##_id)
 
 #  define PROFILE_FUNC                                                    \
-    static const int __profile_id=madness::WorldProfile::register_id(__FUNCTION__); \
+    static const int __profile_id=madness::WorldProfile::register_id(__PRETTY_FUNCTION__); \
     madness::WorldProfileObj __profile_obj(__profile_id)
 
 #  define PROFILE_MEMBER_FUNC(classname)                                       \
-    static const int __profile_id=madness::WorldProfile::register_id(PROFILE_STRINGIFY(classname),  __FUNCTION__); \
+    static const int __profile_id=madness::WorldProfile::register_id(PROFILE_STRINGIFY(classname),  __PRETTY_FUNCTION__); \
     madness::WorldProfileObj __profile_obj(__profile_id)
 
 
