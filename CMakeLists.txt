@@ -102,6 +102,7 @@ add_feature_info(GENTENSOR ENABLE_GENTENSOR "enables use of MRA Function compres
 
 if(ENABLE_GENTENSOR)
   add_definitions(-DUSE_GENTENSOR)
+set(CMAKE_CXX_STANDARD 17 CACHE STRING  "C++ ISO Standard version")
 endif()
 set(TENSOR_USE_GENTENSOR ${ENABLE_GENTENSOR} CACHE BOOL "enable generic tensors")
 
