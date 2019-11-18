@@ -664,14 +664,13 @@ namespace madness {
     }
 
     /// Directly project parent NS coeffs to child NS coeffs
-
     template <typename T, std::size_t NDIM>
     typename FunctionImpl<T,NDIM>::coeffT FunctionImpl<T,NDIM>::parent_to_child_NS(
             const keyT& child, const keyT& parent, const coeffT& coeff) const {
 
         const implT* f=this;
         //        	MADNESS_ASSERT(coeff.tensor_type()==TT_FULL);
-        coeffT result;
+        coeffT result(f->cdata.v2k);
 
         // if the node for child is existent in f, and it is an internal node, we
         // automatically have the NS form; if it is a leaf node, we only have the
@@ -679,9 +678,7 @@ namespace madness {
         if (child==parent) {
             if (coeff.dim(0)==2*f->get_k()) result=coeff;		// internal node
             else if (coeff.dim(0)==f->get_k()) {			// leaf node
-                tensorT t(f->cdata.v2k);
-                t(f->cdata.s0)=coeff.full_tensor_copy();
-                result=coeffT(t,f->get_tensor_args());
+                result(f->cdata.s0)+=coeff;
             } else {
                 MADNESS_EXCEPTION("confused k in parent_to_child_NS",1);
             }
@@ -690,10 +687,8 @@ namespace madness {
             // parent and coeff should refer to a leaf node with sum coeffs only
             // b/c tree should be compressed with leaves kept.
             MADNESS_ASSERT(coeff.dim(0)==f->get_k());
-            const coeffT coeff1=f->parent_to_child(coeff,parent,child);
-            tensorT t(f->cdata.v2k);
-            t(f->cdata.s0)=coeff1.full_tensor_copy();
-            result=coeffT(t,f->get_tensor_args());
+            const coeffT scoeff=f->parent_to_child(coeff,parent,child);
+            result(f->cdata.s0)+=scoeff;
         } else {
             MADNESS_EXCEPTION("confused keys in parent_to_child_NS",1);
         }
