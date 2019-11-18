@@ -666,7 +666,6 @@ namespace madness {
             verify();
             if (VERIFY_TREE) verify_tree();
             double local = impl->norm2sq_local();
-
             impl->world.gop.sum(local);
             impl->world.gop.fence();
             return sqrt(local);

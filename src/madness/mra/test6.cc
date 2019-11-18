@@ -192,13 +192,13 @@ int test_hartree_product(World& world, const long& k, const double thresh) {
 	return nerror;
 }
 
-int test_Vphi_op(World& world, const long& k, const double thresh) {
-    print("entering Vphi_op f(1,2)*g(1)");
+
+/// test construction of a function f(1,2) |p(1) p(2)>
+int test_Vphi_eri_pp(World& world, const long& k, const double thresh) {
+    print("entering Vphi_op f12|p1p2>");
     int nerror=0;
-    bool good;
 
     real_function_6d f12=TwoElectronFactory(world).f12().thresh(thresh).gamma(1.0).k(k+1);
-
 
     const real_function_3d phi=real_factory_3d(world).f(gauss_3d);
     const real_function_3d phi2=phi*phi;
@@ -208,32 +208,75 @@ int test_Vphi_op(World& world, const long& k, const double thresh) {
     	    	.particle2(copy(phi))
     	    	.g12(f12);
 
-    fii.fill_tree();
-	save_function(world,fii,"fii");
-	fii.truncate();
-	fii.print_size("fii truncated");
+    fii.fill_tree().truncate();
 
-	real_function_6d bra =
-			CompositeFactory<double, 6, 3>(world)
+	real_function_6d bra =CompositeFactory<double, 6, 3>(world)
 				.particle1(copy(phi)).particle2(copy(phi));
 
 	const double a = inner(fii,bra);
 	print("<ii | f12 | ii> 6d: ",a);
 
-	const double a1 = inner(phi,phi);
-	print("< i i | i i >", a1*a1);
-
 	// make all the operators that we need
 	real_convolution_3d slaterf12 = SlaterF12Operator(world, 1.0, 1.e-5, 1.e-5);
-
 	real_function_3d fii1=slaterf12(phi2);
 	double b=inner(phi2,fii1);
-	double b1=inner(phi2,phi2);
-	print("<ii | f12 | ii> 3d: ",b);
-	print("<ii | | ii> 3d:     ",b1);
 
-	print("error",a-b);
-	return 1;
+	print("<ii | f12 | ii> 3d: ",b);
+
+	bool good=is_small(a-b,thresh);
+    print(ok(good), "CompositeFactory f(1,2)*|p(1) p(2>  error:",a-b);
+
+    if (not good) nerror++;
+
+    print("all done\n");
+    return nerror;
+}
+
+/// test construction of a function v(1) |p(1,2)>
+int test_Vphi_vpp(World& world, const long& k, const double thresh) {
+    print("entering Vphi_op v(1)|f(1,2)");
+    int nerror=0;
+
+    real_function_6d f12=TwoElectronFactory(world).f12().thresh(thresh).gamma(1.0).k(k+1);
+
+    const real_function_3d phi=real_factory_3d(world).f(gauss_3d);
+    const real_function_3d phi2=phi*phi;
+
+    real_function_6d fii=CompositeFactory<double,6,3>(world)
+    	    	.particle1(copy(phi))
+    	    	.particle2(copy(phi))
+    	    	.g12(f12);
+    fii.fill_tree().truncate();
+
+    real_function_6d fii1=CompositeFactory<double,6,3>(world)
+    	    	.V_for_particle1(copy(phi)).ket(fii);
+    fii1.fill_tree().truncate();
+
+    real_function_6d fii2=CompositeFactory<double,6,3>(world)
+    	    	.particle1(copy(phi2))
+    	    	.particle2(copy(phi))
+    	    	.g12(f12);
+    fii2.fill_tree().truncate();
+
+
+    // make the difference of the two functions
+    real_function_6d diff=fii1-fii2;
+
+    double error=diff.norm2();
+	bool good=is_small(error,thresh);
+    print(ok(good), "CompositeFactory v(1)|f(1,2)>  error:",error);
+
+    if (not good) nerror++;
+
+    print("all done\n");
+    return nerror;
+}
+
+int test_Vphi_op(World& world, const long& k, const double thresh) {
+	int nerror=0;
+	nerror+=test_Vphi_eri_pp(world,k,thresh);
+	nerror+=test_Vphi_vpp(world,k,thresh);
+	return nerror;
 }
 
 /// test f(1,2)*g(1)
@@ -576,15 +619,16 @@ int test_convolution(World& world, const long& k, const double thresh) {
 int test_replicate(World& world, const long& k, const double thresh) {
     real_function_3d phi=real_factory_3d(world).f(gauss_3d);
     auto map=phi.get_pmap();
+    double norm=phi.norm2();
+    print("norm",norm);
     map->print_data_sizes(world,"before replication");
+
     phi.replicate();
     phi.get_pmap()->print_data_sizes(world,"replicated");
     map->print_data_sizes(world,"after replication");
 
     phi.compress();
     phi.reconstruct();
-    double norm=phi.norm2();
-    print("norm",norm);
 
     double norm1=phi.norm2();
     print("norm",norm1);
@@ -760,7 +804,7 @@ int main(int argc, char**argv) {
 //    error+=test_replicate(world,k,thresh);
 
     print(ok(error==0),error,"finished test suite\n");
-    WorldProfile::print(world);
+//    WorldProfile::print(world);
 
     world.gop.fence();
     finalize();

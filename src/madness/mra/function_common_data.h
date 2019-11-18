@@ -130,6 +130,42 @@ namespace madness {
     };
 
 
+    /// collect common functionality does not need to be member function of funcimpl
+    template<typename T, std::size_t NDIM>
+    class FunctionCommonFunctionality {
+    public:
+
+    	const FunctionCommonData<T,NDIM>& cdata;
+    	FunctionCommonFunctionality(const FunctionCommonData<T,NDIM>& cdata) : cdata(cdata) {}
+    	FunctionCommonFunctionality(const long k) : cdata(FunctionCommonData<T,NDIM>::get(k)) {}
+
+        GenTensor<T> coeffs2values(const Key<NDIM>& key, const GenTensor<T>& coeff) const {
+            double scale = pow(2.0,0.5*NDIM*key.level())/sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+            return transform(coeff,cdata.quad_phit).scale(scale);
+        }
+
+        Tensor<T> coeffs2values(const Key<NDIM>& key, const Tensor<T>& coeff) const {
+            double scale = pow(2.0,0.5*NDIM*key.level())/sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+            return transform(coeff,cdata.quad_phit).scale(scale);
+        }
+
+        /// Return the scaling function coeffs when given the function values at the quadrature points
+        /// @param[in] key the key of the function node (box)
+        /// @return function values for function node (box)
+        Tensor<T> values2coeffs(const Key<NDIM>& key, const Tensor<T>& values) const {
+            double scale = pow(0.5,0.5*NDIM*key.level())*sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+            return transform(values,cdata.quad_phiw).scale(scale);
+        }
+
+        GenTensor<T> values2coeffs(const Key<NDIM>& key, const GenTensor<T>& values) const {
+            double scale = pow(0.5,0.5*NDIM*key.level())*sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+            return transform(values,cdata.quad_phiw).scale(scale);
+        }
+
+    };
+
+
+
     class Timer {
 
         typedef ConcurrentHashMap<int,double> map;

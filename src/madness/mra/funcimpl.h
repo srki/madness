@@ -3710,7 +3710,7 @@ namespace madness {
         	double error=0.0;
         	double lo=0.0, hi=0.0, lo1=0.0, hi1=0.0, lo2=0.0, hi2=0.0;
 
-        	pointwise_multiplier() :gimpl(0), impl(0){}
+        	pointwise_multiplier() :gimpl(0), impl(0) {}
         	pointwise_multiplier(const Key<NDIM> key, const coeffT& clhs, implT* i, const FunctionImpl<T,LDIM>* gimpl)
         		: impl(i), gimpl(gimpl), coeff_lhs(clhs) {
         		val_lhs=impl->coeffs2values(key,coeff_lhs);
@@ -3755,25 +3755,26 @@ namespace madness {
         		} else {	// use quadrature of order k+1
 
     	            auto cdata=FunctionCommonData<T,NDIM>::get(impl->get_k()+1);		// npt=k+1
+                	FunctionCommonFunctionality<T,NDIM> fcf_hi_npt(cdata);
 
-    	            // coeffs2values for rhs
+    	            // coeffs2values for rhs: k -> npt=k+1
 		            tensorT coeff1(cdata.vk);
-		            coeff1(impl->cdata.s0)=coeff_rhs;
-		            double scale = pow(2.0,0.5*NDIM*key.level())/sqrt(FunctionDefaults<NDIM>::get_cell_volume());
-		            tensorT val_rhs_k1=transform(coeff1,cdata.quad_phit).scale(scale);
+		            coeff1(impl->cdata.s0)=coeff_rhs;		// s0 is smaller than vk!
+		            tensorT val_rhs_k1=fcf_hi_npt.coeffs2values(key,coeff1);
 
-		            // coeffs2values for lhs
+		            // coeffs2values for lhs: k -> npt=k+1
 		            tensorT coeff_lhs_k1(cdata.vk);
 		            coeff_lhs_k1(impl->cdata.s0)=coeff_lhs.full_tensor_copy();
-		            tensorT val_lhs_k1=transform(coeff_lhs_k1,cdata.quad_phit).scale(scale);
+		            tensorT val_lhs_k1=fcf_hi_npt.coeffs2values(key,coeff_lhs_k1);
 
 		            // multiply
 		            val_lhs_k1.emul(val_rhs_k1);
 
-                    // values2coeffs
-		            tensorT result1(cdata.vq,false), work(cdata.vq,false);
-                    double scale1 = pow(0.5,0.5*NDIM*key.level())*sqrt(FunctionDefaults<NDIM>::get_cell_volume());
-                    fast_transform(val_lhs_k1,cdata.quad_phiw,result1,work).scale(scale1);
+                    // values2coeffs: npt = k+1-> k
+//		            tensorT result1(cdata.vq,false), work(cdata.vq,false);
+//                    double scale1 = pow(0.5,0.5*NDIM*key.level())*sqrt(FunctionDefaults<NDIM>::get_cell_volume());
+//                    fast_transform(val_lhs_k1,cdata.quad_phiw,result1,work).scale(scale1);
+		            tensorT result1=fcf_hi_npt.values2coeffs(key,val_lhs_k1);
 
                     // extract coeffs up to k
                     tensorT result=copy(result1(impl->cdata.s0));
@@ -3790,26 +3791,42 @@ namespace madness {
                 Key<LDIM> key1, key2;
                 key.break_apart(key1,key2);
                 MADNESS_ASSERT(gimpl);
+            	FunctionCommonFunctionality<T,LDIM> fcf_lo(gimpl->cdata);
+            	FunctionCommonFunctionality<T,NDIM> fcf_hi(impl->cdata);
+            	FunctionCommonFunctionality<T,LDIM> fcf_lo_npt(gimpl->get_k()+1);
+            	FunctionCommonFunctionality<T,NDIM> fcf_hi_npt(impl->get_k()+1);
 
-        		std::vector<long> vkhalf=std::vector<long>(LDIM,gimpl->cdata.vk[0]);
-                tensorT ones=tensorT(vkhalf);
+            	// make hi-dim values from lo-dim coeff_rhs on npt grid points
+                tensorT ones=tensorT(fcf_lo_npt.cdata.vk);
                 ones=1.0;
-                tensorT cones=gimpl->values2coeffs(key1,ones);
 
+                tensorT coeff_rhs_npt1(fcf_lo_npt.cdata.vk);
+                coeff_rhs_npt1(fcf_lo.cdata.s0)=coeff_rhs;
+                tensorT val_rhs_npt1=fcf_lo_npt.coeffs2values(key1,coeff_rhs_npt1);
 
-                double glo,ghi;
-                gimpl->tnorm(coeff_rhs, &glo, &ghi);
-
-                if (particle==1) error=glo*hi1 + ghi*lo1 + ghi*hi1;
-                if (particle==2) error=glo*hi2 + ghi*lo2 + ghi*hi2;
-
-                // make the hi-dim values tensor
                 TensorArgs targs(-1.0,TT_2D);
                 coeffT val_rhs;
-                if (particle==1) val_rhs=outer(gimpl->coeffs2values(key1,coeff_rhs),ones,targs);
-                if (particle==2) val_rhs=outer(ones,gimpl->coeffs2values(key2,coeff_rhs),targs);
-                val_rhs.emul(val_lhs);
-                return impl->values2coeffs(key,val_rhs);
+                if (particle==1) val_rhs=outer(val_rhs_npt1,ones,targs);
+                if (particle==2) val_rhs=outer(ones,val_rhs_npt1,targs);
+
+            	// make values from hi-dim coeff_lhs on npt grid points
+	            coeffT coeff_lhs_k1(fcf_hi_npt.cdata.vk,coeff_lhs.tensor_type());
+	            coeff_lhs_k1(fcf_hi.cdata.s0)+=coeff_lhs;
+	            coeffT val_lhs_npt=fcf_hi_npt.coeffs2values(key,coeff_lhs_k1);
+
+	            // multiply
+	            val_lhs_npt.emul(val_rhs);
+
+                // values2coeffs: npt = k+1-> k
+	            coeffT result1=fcf_hi_npt.values2coeffs(key,val_lhs_npt);
+
+                // extract coeffs up to k
+	            coeffT result=copy(result1(impl->cdata.s0));
+                result1(impl->cdata.s0)=0.0;
+                error=result1.normf();
+                result.reduce_rank(impl->get_tensor_args().thresh);
+                return result;
+
         	}
 
             template <typename Archive> void serialize(const Archive& ar) {
@@ -3872,59 +3889,46 @@ namespace madness {
         				result->get_coeffs().replace(key,nodeT(coeffT(),true));
         				return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
         			}
-        		}else{
-        			// this means that the function has to be completely constructed and not mirrored by another function
-
-        			// if the initial level is not reached then this must not be a leaf box
-        			size_t il = result->get_initial_level();
-        			if(FunctionDefaults<NDIM>::get_refine()) il+=1;
-        			if(key.level()<int(il)){
-        				//std::cout << "n=" +  std::to_string(key.level()) + " below initial level " + std::to_string(result->get_initial_level()) + "\n";
-        				// insert empty coeffs for this box and send off jobs for the children
-        				result->get_coeffs().replace(key,nodeT(coeffT(),true));
-        				return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
-        			}
-        			// if further refinement is needed (because we are at a special box, special point)
-        			// and the special_level is not reached then this must not be a leaf box
-        			if(key.level()<result->get_special_level() and leaf_op.special_refinement_needed(key)){
-        				//std::cout << "special refinement for n=" + std::to_string(key.level()) + "\n";
-        				// insert empty coeffs for this box and send off jobs for the children
-        				result->get_coeffs().replace(key,nodeT(coeffT(),true));
-        				return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
-        			}
-
-
-        			auto [sum_coeff,error]=make_sum_coeffs(key);
-
-        			if(leaf_op.post_screening(key,sum_coeff)){
-        				result->get_coeffs().replace(key,nodeT(sum_coeff,false));
-        				//std::cout << "n=" + std::to_string(key.level()) + " is leaf by post_screening\n";
-        				return std::pair<bool,coeffT> (true,coeffT());
-        			}
-
-        			if(error<result->truncate_tol(result->get_thresh(),key)){
-        				double norm=sum_coeff.normf();
-        				//        			  print("error", key,error, norm, result->small++);
-        				//        			  tensorT children_sum_coeffs=make_childrens_sum_coeffs(key);
-        				//        			  tensorT d=result->filter(children_sum_coeffs);
-        				//
-        				//        			  // since they will be better anyway (those are only the s coeffs, not the d)
-        				//        			  sum_coeff=coeffT(copy(d(result->get_cdata().s0)),result->get_tensor_args());
-
-        				result->get_coeffs().replace(key,nodeT(sum_coeff,false));
-        				//std::cout << "n=" + std::to_string(key.level()) + " is leaf by conventional error measurement (" + std::to_string(error)+ ")\n";
-        				return std::pair<bool,coeffT> (true,coeffT());
-        			} else {
-        				result->get_coeffs().replace(key,nodeT(coeffT(),true));
-        			}
-
-        			std::vector<bool> child_is_leaf(1<<NDIM,false);
-        			return continue_recursion(child_is_leaf,tensorT(),key);
-
         		}
 
-        		MADNESS_EXCEPTION("you should not be here",1);
-        		return std::pair<bool,coeffT> (true,coeffT());
+				// this means that the function has to be completely constructed and not mirrored by another function
+
+				// if the initial level is not reached then this must not be a leaf box
+				size_t il = result->get_initial_level();
+				if(FunctionDefaults<NDIM>::get_refine()) il+=1;
+				if(key.level()<int(il)){
+					//std::cout << "n=" +  std::to_string(key.level()) + " below initial level " + std::to_string(result->get_initial_level()) + "\n";
+					// insert empty coeffs for this box and send off jobs for the children
+					result->get_coeffs().replace(key,nodeT(coeffT(),true));
+					return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
+				}
+				// if further refinement is needed (because we are at a special box, special point)
+				// and the special_level is not reached then this must not be a leaf box
+				if(key.level()<result->get_special_level() and leaf_op.special_refinement_needed(key)){
+					//std::cout << "special refinement for n=" + std::to_string(key.level()) + "\n";
+					// insert empty coeffs for this box and send off jobs for the children
+					result->get_coeffs().replace(key,nodeT(coeffT(),true));
+					return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
+				}
+
+				auto [sum_coeff,error]=make_sum_coeffs(key);
+
+				// coeffs are leaf (for whatever reason), insert into tree and stop recursion
+				if(leaf_op.post_screening(key,sum_coeff)){
+					result->get_coeffs().replace(key,nodeT(sum_coeff,false));
+					return std::pair<bool,coeffT> (true,coeffT());
+				}
+
+				// coeffs are accurate, insert into tree and stop recursion
+				if(error<result->truncate_tol(result->get_thresh(),key)){
+					result->get_coeffs().replace(key,nodeT(sum_coeff,false));
+					return std::pair<bool,coeffT> (true,coeffT());
+				}
+
+				// coeffs are inaccurate, insert empty node and continue recursion
+				result->get_coeffs().replace(key,nodeT(coeffT(),true));
+				std::vector<bool> child_is_leaf(1<<NDIM,false);
+				return continue_recursion(child_is_leaf,tensorT(),key);
         	}
 
 

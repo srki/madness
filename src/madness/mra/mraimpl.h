@@ -670,7 +670,7 @@ namespace madness {
 
         const implT* f=this;
         //        	MADNESS_ASSERT(coeff.tensor_type()==TT_FULL);
-        coeffT result(f->cdata.v2k);
+        coeffT result(f->cdata.v2k,coeff.tensor_type());
 
         // if the node for child is existent in f, and it is an internal node, we
         // automatically have the NS form; if it is a leaf node, we only have the
