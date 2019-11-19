@@ -92,6 +92,9 @@ int main(int argc, char** argv) {
         
         START_TIMER;
         real_function_3d beta = real_factory_3d(world).f(beta_func);
+        double n1=alpha1.norm2();
+        double n2=beta.norm2();
+        print("n(alpha), n(beta)",n1,n2);
         double ab = alpha1.inner(beta);
         END_TIMER("1. < a | b >)");
         

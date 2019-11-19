@@ -424,6 +424,7 @@ namespace madness {
         double nt = node.get_norm_tree();
         if (nt == 1e300) nt = 0.0;
         s << norm << ", norm_tree=" << nt << "), rank="<< node.coeff().rank()<<")";
+        if (node.coeff().is_assigned()) s << " dim " << node.coeff().dim(0) << " ";
         return s;
     }
 
@@ -747,7 +748,8 @@ namespace madness {
     	/// @return 	coefficients belonging to key
     	coeffT coeff(const keyT& key) const {
             MADNESS_ASSERT(impl);
-            if (impl->is_compressed() or impl->is_nonstandard())
+            if (impl->is_compressed() or impl->is_nonstandard() or
+            		impl->is_nonstandard_with_leaves())
                 return impl->parent_to_child_NS(key,key_,coeff_);
             return impl->parent_to_child(coeff_,key_,key);
     	}
@@ -870,16 +872,18 @@ namespace madness {
         int truncate_mode; ///< 0=default=(|d|<thresh), 1=(|d|<thresh/2^n), 1=(|d|<thresh/4^n);
         bool autorefine; ///< If true, autorefine where appropriate
         bool truncate_on_project; ///< If true projection inserts at level n-1 not n
-        bool nonstandard; ///< If true, compress keeps scaling coeff
         TensorArgs targs; ///< type of tensor to be used in the FunctionNodes
 
         const FunctionCommonData<T,NDIM>& cdata;
 
         std::shared_ptr< FunctionFunctorInterface<T,NDIM> > functor;
-
-        bool on_demand; ///< does this function have an additional functor?
-        bool compressed; ///< Compression status
-        bool redundant; ///< If true, function keeps sum coefficients on all levels
+public:
+private:
+        TreeState tree_state;
+//        bool on_demand; ///< does this function have an additional functor?
+//        bool compressed; ///< Compression status
+//        bool redundant; ///< If true, function keeps sum coefficients on all levels
+//        bool nonstandard; ///< If true, compress keeps scaling coeff
 
         dcT coeffs; ///< The coefficients
 
@@ -893,32 +897,32 @@ namespace madness {
         Timer timer_filter;
         Timer timer_compress_svd;
         Timer timer_target_driven;
-        bool do_new=false;
         AtomicInt small;
         AtomicInt large;
 
         /// Initialize function impl from data in factory
         FunctionImpl(const FunctionFactory<T,NDIM>& factory)
-            : WorldObject<implT>(factory._world)
-            , world(factory._world)
-            , k(factory._k)
-            , thresh(factory._thresh)
-            , initial_level(factory._initial_level)
-	    , special_level(factory._special_level)
-	    , special_points(factory._special_points)
-            , max_refine_level(factory._max_refine_level)
-            , truncate_mode(factory._truncate_mode)
-            , autorefine(factory._autorefine)
-            , truncate_on_project(factory._truncate_on_project)
-            , nonstandard(false)
-            , targs(factory._thresh,FunctionDefaults<NDIM>::get_tensor_type())
-            , cdata(FunctionCommonData<T,NDIM>::get(k))
-            , functor(factory.get_functor())
-            , on_demand(factory._is_on_demand)
-            , compressed(factory._compressed)
-            , redundant(false)
-            , coeffs(world,factory._pmap,false)
-            //, bc(factory._bc)
+        : WorldObject<implT>(factory._world)
+		  , world(factory._world)
+		  , k(factory._k)
+		  , thresh(factory._thresh)
+		  , initial_level(factory._initial_level)
+		  , special_level(factory._special_level)
+		  , special_points(factory._special_points)
+		  , max_refine_level(factory._max_refine_level)
+		  , truncate_mode(factory._truncate_mode)
+		  , autorefine(factory._autorefine)
+		  , truncate_on_project(factory._truncate_on_project)
+//		  , nonstandard(false)
+		  , targs(factory._thresh,FunctionDefaults<NDIM>::get_tensor_type())
+		  , cdata(FunctionCommonData<T,NDIM>::get(k))
+		  , functor(factory.get_functor())
+//		  , on_demand(factory._is_on_demand)
+//		  , compressed(factory._compressed)
+//		  , redundant(false)
+		  , tree_state(factory._tree_state)
+		  , coeffs(world,factory._pmap,false)
+		  //, bc(factory._bc)
         {
             // PROFILE_MEMBER_FUNC(FunctionImpl); // No need to profile this
             // !!! Ensure that all local state is correctly formed
@@ -961,30 +965,31 @@ namespace madness {
         /// Does \em not copy the coefficients ... creates an empty container.
         template <typename Q>
         FunctionImpl(const FunctionImpl<Q,NDIM>& other,
-                     const std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >& pmap,
-                     bool dozero)
-            : WorldObject<implT>(other.world)
-            , world(other.world)
-            , k(other.k)
-            , thresh(other.thresh)
-            , initial_level(other.initial_level)
-	    , special_level(other.special_level)
-	    , special_points(other.special_points)
-            , max_refine_level(other.max_refine_level)
-            , truncate_mode(other.truncate_mode)
-                         , autorefine(other.autorefine)
-                         , truncate_on_project(other.truncate_on_project)
-                         , nonstandard(other.nonstandard)
-                         , targs(other.targs)
-                         , cdata(FunctionCommonData<T,NDIM>::get(k))
-                         , functor()
-                         , on_demand(false)	// since functor() is an default ctor
-                         , compressed(other.compressed)
-                         , redundant(other.redundant)
-                         , coeffs(world, pmap ? pmap : other.coeffs.get_pmap())
-                         //, bc(other.bc)
-        {
-            if (dozero) {
+        		const std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >& pmap,
+				bool dozero)
+				: WorldObject<implT>(other.world)
+				  , world(other.world)
+				  , k(other.k)
+				  , thresh(other.thresh)
+				  , initial_level(other.initial_level)
+				  , special_level(other.special_level)
+				  , special_points(other.special_points)
+				  , max_refine_level(other.max_refine_level)
+				  , truncate_mode(other.truncate_mode)
+				  , autorefine(other.autorefine)
+				  , truncate_on_project(other.truncate_on_project)
+//				  , nonstandard(other.nonstandard)
+				  , targs(other.targs)
+				  , cdata(FunctionCommonData<T,NDIM>::get(k))
+				  , functor()
+//				  , on_demand(false)	// since functor() is an default ctor
+//				  , compressed(other.compressed)
+//				  , redundant(other.redundant)
+				  , tree_state(other.tree_state)
+				  , coeffs(world, pmap ? pmap : other.coeffs.get_pmap())
+				  //, bc(other.bc)
+				  {
+        	if (dozero) {
                 initial_level = 1;
                 insert_zero_down_to_initial_level(cdata.key0);
 		//world.gop.fence(); <<<<<<<<<<<<<<<<<<<<<<   needs a fence argument
@@ -1113,7 +1118,7 @@ namespace madness {
 
             // note that functor should not be (re)stored
             ar & thresh & initial_level & max_refine_level & truncate_mode
-                & autorefine & truncate_on_project & nonstandard & compressed ; //& bc;
+                & autorefine & truncate_on_project & tree_state;//nonstandard & compressed ; //& bc;
 
             ar & coeffs;
             world.gop.fence();
@@ -1127,7 +1132,7 @@ namespace madness {
 
             // note that functor should not be (re)stored
             ar & k & thresh & initial_level & max_refine_level & truncate_mode
-                & autorefine & truncate_on_project & nonstandard & compressed ; //& bc;
+                & autorefine & truncate_on_project & tree_state;//nonstandard & compressed ; //& bc;
 
             ar & coeffs;
             world.gop.fence();
@@ -1136,10 +1141,25 @@ namespace madness {
         /// Returns true if the function is compressed.
         bool is_compressed() const;
 
+        /// Returns true if the function is compressed.
+        bool is_reconstructed() const;
+
         /// Returns true if the function is redundant.
         bool is_redundant() const;
 
         bool is_nonstandard() const;
+
+        bool is_nonstandard_with_leaves() const;
+
+        bool is_on_demand() const;
+
+        bool has_leaves() const;
+
+        void set_tree_state(const TreeState& state) {
+        	tree_state=state;
+        }
+
+        TreeState get_tree_state() const {return tree_state;}
 
         void set_functor(const std::shared_ptr<FunctionFunctorInterface<T,NDIM> > functor1);
 
@@ -1149,9 +1169,6 @@ namespace madness {
 
         void unset_functor();
 
-        bool& is_on_demand(); // ???????????????????? why returning reference
-
-        const bool& is_on_demand() const; // ?????????????????????
 
         TensorType get_tensor_type() const;
 
@@ -3391,7 +3408,8 @@ namespace madness {
                 woT::task(p, &implT:: template forward_traverse<coeff_opT,apply_opT>, coeff_op, apply_op, key0);
             }
 
-            this->compressed=false;
+            set_tree_state(reconstructed);
+//            this->compressed=false;
         }
 
         /// Hartree product of two LDIM functions to yield a NDIM = 2*LDIM function
@@ -3514,8 +3532,8 @@ namespace madness {
         template<std::size_t LDIM, typename leaf_opT>
         void hartree_product(const FunctionImpl<T,LDIM>* p1, const FunctionImpl<T,LDIM>* p2,
                              const leaf_opT& leaf_op, bool fence) {
-            MADNESS_ASSERT(p1->is_nonstandard());
-            MADNESS_ASSERT(p2->is_nonstandard());
+            MADNESS_ASSERT(p1->is_nonstandard() or p1->is_nonstandard_with_leaves());
+            MADNESS_ASSERT(p2->is_nonstandard() or p2->is_nonstandard_with_leaves());
 
             const keyT key0=cdata.key0;
 
@@ -3538,7 +3556,7 @@ namespace madness {
 
             }
 
-            this->compressed=false;
+            set_tree_state(reconstructed);
             if (fence) world.gop.fence();
         }
 
@@ -3771,9 +3789,6 @@ namespace madness {
 		            val_lhs_k1.emul(val_rhs_k1);
 
                     // values2coeffs: npt = k+1-> k
-//		            tensorT result1(cdata.vq,false), work(cdata.vq,false);
-//                    double scale1 = pow(0.5,0.5*NDIM*key.level())*sqrt(FunctionDefaults<NDIM>::get_cell_volume());
-//                    fast_transform(val_lhs_k1,cdata.quad_phiw,result1,work).scale(scale1);
 		            tensorT result1=fcf_hi_npt.values2coeffs(key,val_lhs_k1);
 
                     // extract coeffs up to k
@@ -4123,285 +4138,6 @@ namespace madness {
         	}
         };
 
-
-//        template<typename opT, size_t LDIM>
-//        struct Vphi_op {
-//
-//        	bool randomize() const {return true;}
-//
-//        	typedef Vphi_op_NS<opT,LDIM> this_type;
-//        	typedef CoeffTracker<T,NDIM> ctT;
-//        	typedef CoeffTracker<T,LDIM> ctL;
-//
-//        	implT* result;  		///< where to construct Vphi, no need to track parents
-//        	opT leaf_op;    	    ///< deciding if a given FunctionNode will be a leaf node
-//        	ctT iaket;				///< the ket of a pair function (exclusive with p1, p2)
-//        	ctL iap1, iap2;			///< the particles 1 and 2 (exclusive with ket)
-//        	ctL iav1, iav2;			///< potentials for particles 1 and 2
-//        	const implT* eri;		///< 2-particle potential, must be on-demand
-//
-//        	// ctor
-//        	Vphi_op() : eri(), result() {}
-//        	Vphi_op(implT* result, const opT& leaf_op, const ctT& iaket,
-//        			const ctL& iap1, const ctL& iap2, const ctL& iav1, const ctL& iav2,
-//					const implT* eri)
-//        	: result(result), leaf_op(leaf_op), iaket(iaket), iap1(iap1), iap2(iap2)
-//        	, iav1(iav1), iav2(iav2), eri(eri) {
-//
-//        		// 2-particle potential must be on-demand
-//        		if (eri) MADNESS_ASSERT(eri->is_on_demand());
-//        	}
-//
-//        	/// make and insert the coefficients into result's tree
-//        	std::pair<bool,coeffT> operator()(const Key<NDIM>& key) const {
-//
-//
-//        		if(leaf_op.do_pre_screening()){
-//        			// this means that we only construct the boxes which are leaf boxes from the other function in the leaf_op
-//        			if(leaf_op.pre_screening(key)){
-//        				// construct sum_coefficients, insert them and leave
-//        				const coeffT sum_coeff=make_sum_coeffs(key);
-//        				result->get_coeffs().replace(key,nodeT(sum_coeff,false));
-//        				return std::pair<bool,coeffT> (true,coeffT());
-//        			}else{
-//        				result->get_coeffs().replace(key,nodeT(coeffT(),true));
-//        				return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
-//        			}
-//        		}else{
-//        			// this means that the function has to be completely constructed and not mirrored by another function
-//
-//        			// if the initial level is not reached then this must not be a leaf box
-//        			size_t il = result->get_initial_level();
-//        			if(FunctionDefaults<NDIM>::get_refine()) il+=1;
-//        			if(key.level()<int(il)){
-//        				//std::cout << "n=" +  std::to_string(key.level()) + " below initial level " + std::to_string(result->get_initial_level()) + "\n";
-//        				// insert empty coeffs for this box and send off jobs for the children
-//        				result->get_coeffs().replace(key,nodeT(coeffT(),true));
-//        				return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
-//        			}
-//        			// if further refinement is needed (because we are at a special box, special point)
-//        			// and the special_level is not reached then this must not be a leaf box
-//        			if(key.level()<result->get_special_level() and leaf_op.special_refinement_needed(key)){
-//        				//std::cout << "special refinement for n=" + std::to_string(key.level()) + "\n";
-//        				// insert empty coeffs for this box and send off jobs for the children
-//        				result->get_coeffs().replace(key,nodeT(coeffT(),true));
-//        				return continue_recursion(std::vector<bool>(1<<NDIM,false),tensorT(),key);
-//        			}
-//
-//
-//        			coeffT sum_coeff=make_sum_coeffs(key);
-//
-//        			if(leaf_op.post_screening(key,sum_coeff)){
-//        				result->get_coeffs().replace(key,nodeT(sum_coeff,false));
-//        				//std::cout << "n=" + std::to_string(key.level()) + " is leaf by post_screening\n";
-//        				return std::pair<bool,coeffT> (true,coeffT());
-//        			}
-//
-//        			// do the conventional error-measurement and use the computed child coeffs to determine if they will be leafs
-//        			tensorT children_sum_coeffs=make_childrens_sum_coeffs(key);
-//        			tensorT d=result->filter(children_sum_coeffs);
-//
-//        			// since they will be better anyway (those are only the s coeffs, not the d)
-//        			sum_coeff=coeffT(copy(d(result->get_cdata().s0)),result->get_tensor_args());
-//
-//        			// delte s coeffs from the children tensor to get the d coeffs and the error
-//        			d(result->get_cdata().s0)=0.0;
-//        			double error=d.normf();
-//
-//        			if(error<result->truncate_tol(result->get_thresh(),key)){
-//        				result->get_coeffs().replace(key,nodeT(sum_coeff,false));
-//        				//std::cout << "n=" + std::to_string(key.level()) + " is leaf by conventional error measurement (" + std::to_string(error)+ ")\n";
-//        				return std::pair<bool,coeffT> (true,coeffT());
-//        			}
-//
-//        			// at this point the current box will not become a leaf anymore, but we can pre-screen the chidren
-//        			// if no screening is enabled then the child boxes are compared to the downsampled parent boxes, if they are represented well they will be leaves
-//        			std::vector<bool> child_is_leaf(1<<NDIM);
-//        			std::size_t i=0;
-//        			for (KeyChildIterator<NDIM> kit(key); kit; ++kit, ++i) {
-//        				// post-determination for this child's coeffs
-//        				coeffT child_coeff=coeffT(copy(children_sum_coeffs(result->child_patch(kit.key()))),
-//        						result->get_tensor_args());
-//        				child_is_leaf[i]=leaf_op.post_screening(kit.key(),child_coeff);
-//
-//        				// compare to parent sum coeffs (failsafe)
-//        				child_is_leaf[i]=(child_is_leaf[i] or leaf_op.compare_to_parent(kit.key(),child_coeff,sum_coeff));
-//        			}
-//        			// insert empty sum coeffs for this box and
-//        			// send off the tasks for those children that might not be leaves;
-//        			result->get_coeffs().replace(key,nodeT(coeffT(),true));
-//        			//std::cout << "n=" + std::to_string(key.level()) + " is no leaf\n";
-//        			return continue_recursion(child_is_leaf,children_sum_coeffs,key);
-//        		}
-//
-//        		MADNESS_EXCEPTION("you should not be here",1);
-//        		return std::pair<bool,coeffT> (true,coeffT());
-//        	}
-//
-//
-//        	/// loop over all children and either insert their sum coeffs or continue the recursion
-//
-//        	/// @param[in]	child_is_leaf	for each child: is it a leaf?
-//        	/// @param[in]	coeffs	coefficient tensor with 2^N sum coeffs (=unfiltered NS coeffs)
-//        	/// @param[in]	key		the key for the NS coeffs (=parent key of the children)
-//        	/// @return		to avoid recursion outside this return: std::pair<is_leaf,coeff> = true,coeffT()
-//        	std::pair<bool,coeffT> continue_recursion(const std::vector<bool> child_is_leaf,
-//        			const tensorT& coeffs, const keyT& key) const {
-//        		std::size_t i=0;
-//        		for (KeyChildIterator<NDIM> kit(key); kit; ++kit, ++i) {
-//        			keyT child=kit.key();
-//        			bool is_leaf=child_is_leaf[i];
-//
-//        			if (is_leaf) {
-//        				// insert the sum coeffs
-//        				insert_op<T,NDIM> iop(result);
-//        				iop(child,coeffT(copy(coeffs(result->child_patch(child))),result->get_tensor_args()),is_leaf);
-//        			} else {
-//        				this_type child_op=this->make_child(child);
-//        				noop<T,NDIM> no;
-//        				// spawn activation where child is local
-//        				ProcessID p=result->get_coeffs().owner(child);
-//
-//        				void (implT::*ft)(const Vphi_op_NS<opT,LDIM>&, const noop<T,NDIM>&, const keyT&) const = &implT:: template forward_traverse< Vphi_op_NS<opT,LDIM>, noop<T,NDIM> >;
-//        				result->task(p, ft, child_op, no, child);
-//        			}
-//        		}
-//        		// return e sum coeffs; also return always is_leaf=true:
-//        		// the recursion is continued within this struct, not outside in traverse_tree!
-//        		return std::pair<bool,coeffT> (true,coeffT());
-//        	}
-//
-//        	/// return the values of the 2-particle potential
-//
-//        	/// @param[in]	key		the key for which the values are requested
-//        	/// @return		val_eri	the values in full tensor form
-//        	tensorT eri_values(const keyT& key) const {
-//        		tensorT val_eri;
-//        		if (eri and eri->is_on_demand()) {
-//        			if (eri->get_functor()->provides_coeff()) {
-//        				val_eri=eri->coeffs2values(
-//        						key,eri->get_functor()->coeff(key).full_tensor());
-//        			} else {
-//        				val_eri=tensorT(eri->cdata.vk);
-//        				eri->fcube(key,*(eri->get_functor()),eri->cdata.quad_x,val_eri);
-//        			}
-//        		}
-//        		return val_eri;
-//        	}
-//
-//        	/// make the sum coeffs for key
-//        	coeffT make_sum_coeffs(const keyT& key) const {
-//        		// break key into particles
-//        		Key<LDIM> key1, key2;
-//        		key.break_apart(key1,key2);
-//
-//        		TensorArgs targs=result->get_tensor_args();
-//        		// use the ket coeffs if they are there, or make them by hartree product
-//        		const coeffT coeff_ket_NS = (iaket.get_impl())
-//                    			    		? iaket.coeff(key)
-//                    			    				: outer(iap1.coeff(key1),iap2.coeff(key2),targs);
-//
-//        		coeffT val_potential1, val_potential2;
-//        		if (iav1.get_impl()) {
-//        			coeffT tmp=iav1.coeff(key1)(iav1.get_impl()->get_cdata().s0);
-//        			val_potential1=iav1.get_impl()->coeffs2values(key1,tmp);
-//        		}
-//        		if (iav2.get_impl()) {
-//        			coeffT tmp=iav2.coeff(key2)(iav2.get_impl()->get_cdata().s0);
-//        			val_potential2=iav2.get_impl()->coeffs2values(key2,tmp);
-//        		}
-//        		coeffT tmp=coeff_ket_NS(result->get_cdata().s0);
-//
-//        		return result->assemble_coefficients(key,tmp,
-//        				val_potential1,val_potential2,eri_values(key));
-//        	}
-//
-//        	/// make the sum coeffs for all children of key
-//        	tensorT make_childrens_sum_coeffs(const keyT& key) const {
-//        		// break key into particles
-//        		Key<LDIM> key1, key2;
-//        		key.break_apart(key1,key2);
-//        		TensorArgs targs=result->get_tensor_args();
-//
-//        		// use the ket coeffs if they are there, or make them by hartree product
-//        		const coeffT coeff_ket_NS = (iaket.get_impl())
-//                    			    		? iaket.coeff(key)
-//                    			    				: outer(iap1.coeff(key1),iap2.coeff(key2),targs);
-//
-//        		// get the sum coeffs for all children
-//        		const coeffT coeff_ket_unfiltered=result->unfilter(coeff_ket_NS);
-//        		const coeffT coeff_v1_unfiltered=(iav1.get_impl())
-//                    			    		? iav1.get_impl()->unfilter(iav1.coeff(key1)) : coeffT();
-//        		const coeffT coeff_v2_unfiltered=(iav2.get_impl())
-//                    			    		? iav2.get_impl()->unfilter(iav2.coeff(key2)) : coeffT();
-//
-//        		// result sum coeffs of all children
-//        		tensorT s_coeffs(result->cdata.v2k);
-//        		for (KeyChildIterator<NDIM> kit(key); kit; ++kit) {
-//
-//        			// break key into particles
-//        			Key<LDIM> child1, child2;
-//        			kit.key().break_apart(child1,child2);
-//
-//        			// make the values of the potentials for each child
-//        			// transform the child patch of s coeffs to values
-//        			coeffT val_potential1, val_potential2;
-//        			if (iav1.get_impl()) {
-//        				coeffT tmp=coeff_v1_unfiltered(iav1.get_impl()->child_patch(child1));
-//        				val_potential1=iav1.get_impl()->coeffs2values(child1,tmp);
-//        			}
-//        			if (iav2.get_impl()) {
-//        				coeffT tmp=coeff_v2_unfiltered(iav2.get_impl()->child_patch(child2));
-//        				val_potential2=iav2.get_impl()->coeffs2values(child2,tmp);
-//        			}
-//        			const coeffT coeff_ket=coeff_ket_unfiltered(result->child_patch(kit.key()));
-//
-//        			// the sum coeffs for this child
-//        			const tensorT val_eri=eri_values(kit.key());
-//        			const coeffT coeff_result=result->assemble_coefficients(kit.key(),coeff_ket,
-//        					val_potential1,val_potential2,val_eri);
-//
-//        			// accumulate the sum coeffs of the children here
-//        			s_coeffs(result->child_patch(kit.key()))+=coeff_result.full_tensor_copy();
-//        		}
-//        		return s_coeffs;
-//
-//        	}
-//
-//        	this_type make_child(const keyT& child) const {
-//
-//        		// break key into particles
-//        		Key<LDIM> key1, key2;
-//        		child.break_apart(key1,key2);
-//
-//        		return this_type(result,leaf_op,iaket.make_child(child),
-//        				iap1.make_child(key1),iap2.make_child(key2),
-//						iav1.make_child(key1),iav2.make_child(key2),eri);
-//        	}
-//
-//        	Future<this_type> activate() const {
-//        		Future<ctT> iaket1=iaket.activate();
-//        		Future<ctL> iap11=iap1.activate();
-//        		Future<ctL> iap21=iap2.activate();
-//        		Future<ctL> iav11=iav1.activate();
-//        		Future<ctL> iav21=iav2.activate();
-//        		return result->world.taskq.add(detail::wrap_mem_fn(*const_cast<this_type *> (this),
-//        				&this_type::forward_ctor),result,leaf_op,
-//        				iaket1,iap11,iap21,iav11,iav21,eri);
-//        	}
-//
-//        	this_type forward_ctor(implT* result1, const opT& leaf_op, const ctT& iaket1,
-//        			const ctL& iap11, const ctL& iap21, const ctL& iav11, const ctL& iav21,
-//					const implT* eri1) {
-//        		return this_type(result1,leaf_op,iaket1,iap11,iap21,iav11,iav21,eri1);
-//        	}
-//
-//        	/// serialize this (needed for use in recursive_op)
-//        	template <typename Archive> void serialize(const Archive& ar) {
-//        		ar & iaket & eri & result & leaf_op & iap1 & iap2 & iav1 & iav2;
-//        	}
-//        };
-
         /// assemble the function V*phi using V and phi given from the functor
 
         /// this function must have been constructed using the CompositeFunctorInterface.
@@ -4442,11 +4178,17 @@ namespace madness {
           if (p2) p2->undo_redundant(false);	// fence here
           world.gop.fence();
 
-          if (ket) ket->compress(true,true,false,false);
-          if (v1) v1->compress(true,true,false,false);
-          if (v2) v2->compress(true,true,false,false);
-          if (p1) p1->compress(true,true,false,false);
-          if (p2) p2->compress(true,true,false,false);	// fence here
+//          if (ket) ket->compress(true,true,false,false);
+//          if (v1) v1->compress(true,true,false,false);
+//          if (v2) v2->compress(true,true,false,false);
+//          if (p1) p1->compress(true,true,false,false);
+//          if (p2) p2->compress(true,true,false,false);	// fence here
+          if (ket) ket->compress(nonstandard_with_leaves,false);
+          if (v1) v1->compress(nonstandard_with_leaves,false);
+          if (v2) v2->compress(nonstandard_with_leaves,false);
+          if (p1) p1->compress(nonstandard_with_leaves,false);
+          if (p2) p2->compress(nonstandard_with_leaves,false);	// fence here
+
           world.gop.fence();
           print_size("in make_Vphi after compression");
           small=0;
@@ -4477,17 +4219,17 @@ namespace madness {
           }
 
           world.gop.fence();
-
+          set_tree_state(reconstructed);
           // remove internal coefficients
-          this->redundant=true;
-          this->undo_redundant(false);
+//          this->redundant=true;
+//          this->undo_redundant(false);
 
-          // set right state
-          this->compressed=false;
-          this->on_demand=false;
-          this->redundant=false;
-          this->nonstandard=false;
-          if (fence) world.gop.fence();
+//          // set right state
+//          this->compressed=false;
+//          this->on_demand=false;
+//          this->redundant=false;
+//          this->nonstandard=false;
+//          if (fence) world.gop.fence();
 
         }
 
@@ -4663,10 +4405,12 @@ namespace madness {
         /// @param[in] nonstandard	keep sum coeffs at all other levels, except leaves
         /// @param[in] keepleaves	keep sum coeffs (but no diff coeffs) at leaves
         /// @param[in] redundant    keep only sum coeffs at all levels, discard difference coeffs
-        void compress(bool nonstandard, bool keepleaves, bool redundant, bool fence);
+//        void compress(bool nonstandard, bool keepleaves, bool redundant, bool fence);
+        void compress(const TreeState newstate, bool fence);
 
         // Invoked on node where key is local
-        Future<coeffT > compress_spawn(const keyT& key, bool nonstandard, bool keepleaves, bool redundant);
+        Future<coeffT > compress_spawn(const keyT& key, bool nonstandard, bool keepleaves,
+        		bool redundant1);
 
         /// convert this to redundant, i.e. have sum coefficients on all levels
         void make_redundant(const bool fence);
@@ -4699,7 +4443,7 @@ namespace madness {
         /// @param[in] nonstandard  keep the sum coefficients with the wavelet coefficients
         /// @param[in] redundant    keep only the sum coefficients, discard the wavelet coefficients
         /// @return 		the sum coefficients
-        coeffT compress_op(const keyT& key, const std::vector< Future<coeffT > >& v, bool nonstandard, bool redundant);
+        coeffT compress_op(const keyT& key, const std::vector< Future<coeffT > >& v, bool nonstandard);
 
 
         /// similar to compress_op, but insert only the sum coefficients in the tree
@@ -4731,6 +4475,7 @@ namespace madness {
                 if (key.level()> 0 && node.has_coeff()) {
                     if (node.has_children()) {
                         // Zero out scaling coeffs
+                    	MADNESS_ASSERT(node.coeff().dim(0)==2*impl->get_k());
                         node.coeff()(impl->cdata.s0)=0.0;
                         node.reduceRank(impl->targs.thresh);
                     } else {
@@ -4977,9 +4722,10 @@ namespace madness {
             if (fence)
                 world.gop.fence();
 
-            this->compressed=true;
-            this->nonstandard=true;
-            this->redundant=false;
+            set_tree_state(nonstandard);
+//            this->compressed=true;
+//            this->nonstandard=true;
+//            this->redundant=false;
 
         }
 
@@ -6236,9 +5982,10 @@ namespace madness {
                     }
                 }
             }
-            this->compressed=false;
-            this->nonstandard=false;
-            this->redundant=true;
+            set_tree_state(redundant);
+//            this->compressed=false;
+//            this->nonstandard=false;
+//            this->redundant=true;
         }
 
 

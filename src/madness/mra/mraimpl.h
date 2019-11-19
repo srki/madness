@@ -227,29 +227,52 @@ namespace madness {
                       coeff_op, apply_op, cdata.key0);
 
         }
-
-        this->compressed=false;
+        set_tree_state(reconstructed);
         if (fence) world.gop.fence();
     }
 
     /// Returns true if the function is compressed.
     template <typename T, std::size_t NDIM>
     bool FunctionImpl<T,NDIM>::is_compressed() const {
-        return compressed;
+        return (tree_state==compressed);
+    }
+
+    /// Returns true if the function is compressed.
+    template <typename T, std::size_t NDIM>
+    bool FunctionImpl<T,NDIM>::is_reconstructed() const {
+        return (tree_state==reconstructed);
     }
 
     /// Returns true if the function is redundant.
     template <typename T, std::size_t NDIM>
     bool FunctionImpl<T,NDIM>::is_redundant() const {
-        return redundant;
+        return (tree_state==redundant);
     }
 
     template <typename T, std::size_t NDIM>
-    bool FunctionImpl<T,NDIM>::is_nonstandard() const {return nonstandard;}
+    bool FunctionImpl<T,NDIM>::is_nonstandard() const {
+    	return (tree_state==nonstandard);
+    }
+
+    template <typename T, std::size_t NDIM>
+    bool FunctionImpl<T,NDIM>::is_nonstandard_with_leaves() const {
+    	return (tree_state==nonstandard_with_leaves);
+    }
+
+    template <typename T, std::size_t NDIM>
+    bool FunctionImpl<T,NDIM>::is_on_demand() const {
+    	return tree_state==on_demand;
+    }
+
+    template <typename T, std::size_t NDIM>
+    bool FunctionImpl<T,NDIM>::has_leaves() const {
+    	return (tree_state==nonstandard_with_leaves);
+    }
 
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::set_functor(const std::shared_ptr<FunctionFunctorInterface<T,NDIM> > functor1) {
-        this->on_demand=true;
+        set_tree_state(on_demand);
+//    	this->on_demand=true;
         functor=functor1;
     }
 
@@ -267,15 +290,10 @@ namespace madness {
 
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::unset_functor() {
-        this->on_demand=false;
+//        this->on_demand=false;
+        set_tree_state(unknown);
         functor.reset();
     }
-
-    template <typename T, std::size_t NDIM>
-    bool& FunctionImpl<T,NDIM>::is_on_demand() {return on_demand;};
-
-    template <typename T, std::size_t NDIM>
-    const bool& FunctionImpl<T,NDIM>::is_on_demand() const {return on_demand;};
 
     template <typename T, std::size_t NDIM>
     TensorType FunctionImpl<T,NDIM>::get_tensor_type() const {return targs.tt;}
@@ -701,7 +719,7 @@ namespace madness {
     // q>0 return coeffs [k,q,M] for fft sum
     template <typename T, std::size_t NDIM>
     typename FunctionImpl<T,NDIM>::tensorT FunctionImpl<T,NDIM>::coeffs_for_jun(Level n, long q) {
-        MADNESS_ASSERT(compressed && nonstandard && NDIM<=3);
+        MADNESS_ASSERT(is_nonstandard() && NDIM<=3);
         tensorT r,r0;
         long N=1<<n;
         long M = (q ? N/q: N);
@@ -1407,7 +1425,8 @@ namespace madness {
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::trickle_down(bool fence) {
         //            MADNESS_ASSERT(is_redundant());
-        nonstandard = compressed = redundant = false;
+//        nonstandard = compressed = redundant = false;
+        set_tree_state(reconstructed);
         //            this->print_size("in trickle_down");
         if (world.rank() == coeffs.owner(cdata.key0))
             woT::task(world.rank(), &implT::trickle_down_op, cdata.key0,coeffT());
@@ -1463,7 +1482,8 @@ namespace madness {
     void FunctionImpl<T,NDIM>::reconstruct(bool fence) {
         // Must set true here so that successive calls without fence do the right thing
         MADNESS_ASSERT(not is_redundant());
-        nonstandard = compressed = redundant = false;
+        set_tree_state(reconstructed);
+//        nonstandard = compressed = redundant = false;
         if (world.rank() == coeffs.owner(cdata.key0))
             woT::task(world.rank(), &implT::reconstruct_op, cdata.key0,coeffT());
         if (fence)
@@ -1478,22 +1498,21 @@ namespace madness {
     /// @param[in] keepleaves	keep sum coeffs (but no diff coeffs) at leaves
     /// @param[in] redundant    keep only sum coeffs at all levels, discard difference coeffs
     template <typename T, std::size_t NDIM>
-    void FunctionImpl<T,NDIM>::compress(bool nonstandard, bool keepleaves, bool redundant, bool fence) {
-        MADNESS_ASSERT(not is_redundant());
+//    void FunctionImpl<T,NDIM>::compress(bool nonstandard, bool keepleaves, bool redundant, bool fence) {
+    void FunctionImpl<T,NDIM>::compress(const TreeState newstate, bool fence) {
+        MADNESS_ASSERT(is_reconstructed());
         // Must set true here so that successive calls without fence do the right thing
-        this->compressed = true;
-        this->nonstandard = nonstandard;
-        this->redundant = redundant;
+//        this->compressed = true;
+//        this->nonstandard = nonstandard;
+//        this->redundant = redundant;
+        set_tree_state(newstate);
+        bool keepleaves1=(tree_state==nonstandard_with_leaves) or (tree_state==redundant);
+        bool nonstandard1=(tree_state==nonstandard) or (tree_state==nonstandard_with_leaves);
+        bool redundant1=(tree_state==redundant);
 
-        // these two are exclusive
-        MADNESS_ASSERT(not (redundant and nonstandard));
-        // otherwise we loose information
-        if (redundant) {MADNESS_ASSERT(keepleaves);}
-
-        //            this->print_tree();
         if (world.rank() == coeffs.owner(cdata.key0)) {
 
-            compress_spawn(cdata.key0, nonstandard, keepleaves, redundant);
+            compress_spawn(cdata.key0, nonstandard1, keepleaves1, redundant1);
         }
         if (fence)
             world.gop.fence();
@@ -1513,8 +1532,9 @@ namespace madness {
         // we need the leaf sum coeffs, so reconstruct
         if (is_compressed()) reconstruct(true);
 
-        compress(false,true,true,fence);
-        compressed=false;
+//        compress(false,true,true,fence);
+        compress(redundant,fence);
+        tree_state=redundant;
 
     }
 
@@ -1523,7 +1543,8 @@ namespace madness {
     void FunctionImpl<T,NDIM>::undo_redundant(const bool fence) {
 
         if (!is_redundant()) return;
-        redundant = compressed = nonstandard = false;
+        tree_state=reconstructed;
+//        redundant = compressed = nonstandard = false;
         flo_unary_op_node_inplace(remove_internal_coeffs(),fence);
     }
 
@@ -1651,10 +1672,10 @@ namespace madness {
     /// @param[in] redundant    keep only the sum coefficients, discard the wavelet coefficients
     /// @return 		the sum coefficients
     template <typename T, std::size_t NDIM>
-    typename FunctionImpl<T,NDIM>::coeffT FunctionImpl<T,NDIM>::compress_op(const keyT& key, const std::vector< Future<coeffT > >& v, bool nonstandard, bool redundant) {
+    typename FunctionImpl<T,NDIM>::coeffT FunctionImpl<T,NDIM>::compress_op(const keyT& key,
+    		const std::vector< Future<coeffT > >& v, bool nonstandard1) {
         //PROFILE_MEMBER_FUNC(FunctionImpl);
 
-        MADNESS_ASSERT(not redundant);
         double cpu0=cpu_time();
         // Copy child scaling coeffs into contiguous block
         tensorT d(cdata.v2k);
@@ -1693,16 +1714,11 @@ namespace madness {
         // need the deep copy for contiguity
         coeffT ss=coeffT(copy(d(cdata.s0)));
 
-        if (key.level()> 0 && !nonstandard)
+        if (key.level()> 0 && !nonstandard1)
             d(cdata.s0) = 0.0;
 
-        // insert either sum or difference coefficients
-        if (redundant) {
-            acc->second.set_coeff(ss);
-        } else {
-            coeffT dd=coeffT(d,targs2);
-            acc->second.set_coeff(dd);
-        }
+        coeffT dd=coeffT(d,targs2);
+        acc->second.set_coeff(dd);
         cpu1=cpu_time();
         timer_compress_svd.accumulate(cpu1-cpu0);
 
@@ -1738,7 +1754,8 @@ namespace madness {
     void FunctionImpl<T,NDIM>::standard(bool fence) {
 
         flo_unary_op_node_inplace(do_standard(this),fence);
-        nonstandard = false;
+        set_tree_state(compressed);
+//        nonstandard = false;
     }
 
 
@@ -1774,9 +1791,10 @@ namespace madness {
 
         double end=wall_time();
         double elapsed=end-begin;
-        this->compressed=true;
-        this->nonstandard=true;
-        this->redundant=false;
+        set_tree_state(nonstandard);
+//        this->compressed=true;
+//        this->nonstandard=true;
+//        this->redundant=false;
         if (fence) world.gop.fence();
         return elapsed;
     }
@@ -2536,9 +2554,9 @@ namespace madness {
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::insert_zero_down_to_initial_level(const keyT& key) {
         PROFILE_MEMBER_FUNC(FunctionImpl);
-        if (compressed) initial_level = std::max(initial_level,1); // Otherwise zero function is confused
+        if (is_compressed()) initial_level = std::max(initial_level,1); // Otherwise zero function is confused
         if (coeffs.is_local(key)) {
-            if (compressed) {
+            if (is_compressed()) {
                 if (key.level() == initial_level) {
                     coeffs.replace(key, nodeT(coeffT(), false));
                 }
@@ -3077,7 +3095,7 @@ namespace madness {
         PROFILE_MEMBER_FUNC(FunctionImpl);
         std::vector<long> v0(NDIM,0);
         T sum = 0.0;
-        if (compressed) {
+        if (is_compressed()) {
             if (world.rank() == coeffs.owner(cdata.key0)) {
                 typename dcT::const_iterator it = coeffs.find(cdata.key0).get();
                 if (it != coeffs.end()) {
@@ -3144,7 +3162,7 @@ namespace madness {
 
     template <typename T, std::size_t NDIM>
     Future< GenTensor<T> > FunctionImpl<T,NDIM>::compress_spawn(const Key<NDIM>& key,
-                                                                bool nonstandard, bool keepleaves, bool redundant) {
+				bool nonstandard1, bool keepleaves, bool redundant1) {
         if (!coeffs.probe(key)) print("missing node",key);
         MADNESS_ASSERT(coeffs.probe(key));
 
@@ -3157,10 +3175,10 @@ namespace madness {
                 //PROFILE_BLOCK(compress_send); // Too fine grain for routine profiling
                 // readily available
                 v[i] = woT::task(coeffs.owner(kit.key()), &implT::compress_spawn, kit.key(),
-                                 nonstandard, keepleaves, redundant, TaskAttributes::hipri());
+                                 nonstandard1, keepleaves, redundant1, TaskAttributes::hipri());
             }
-            if (redundant) return woT::task(world.rank(),&implT::make_redundant_op, key, v);
-            return woT::task(world.rank(),&implT::compress_op, key, v, nonstandard, redundant);
+            if (redundant1) return woT::task(world.rank(),&implT::make_redundant_op, key, v);
+            return woT::task(world.rank(),&implT::compress_op, key, v, nonstandard1);
         }
         else {
             Future<coeffT > result(node.coeff());
@@ -3270,7 +3288,7 @@ namespace madness {
         PROFILE_MEMBER_FUNC(FunctionImpl);
         Tensor<T> r(NDIM, &npt[0]);
         //r(___) = 99.0;
-        MADNESS_ASSERT(!compressed);
+        MADNESS_ASSERT(is_reconstructed());
 
         for (typename dcT::const_iterator it=coeffs.begin(); it!=coeffs.end(); ++it) {
             const keyT& key = it->first;

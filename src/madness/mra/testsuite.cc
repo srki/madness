@@ -859,7 +859,7 @@ int test_coulomb(World& world) {
 
     f.reconstruct();
     START_TIMER;
-    f.nonstandard(false,true);
+    f.make_nonstandard(false,true);
     END_TIMER("nonstandard");
 
     if (world.rank() == 0) {

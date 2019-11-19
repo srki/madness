@@ -55,6 +55,16 @@ namespace madness {
 
     enum BCType {BC_ZERO, BC_PERIODIC, BC_FREE, BC_DIRICHLET, BC_ZERONEUMANN, BC_NEUMANN};
 
+    enum TreeState {
+    	reconstructed,				///< s coeffs at the leaves only
+		compressed, 				///< d coeffs in internal nodes, s and d coeffs at the root
+		nonstandard, 				///< s and d coeffs in internal nodes
+    	nonstandard_with_leaves, 	///< like nonstandard, with s coeffs at the leaves
+		redundant,					///< s coeffs everywhere
+		on_demand,					///< no coeffs anywhere, but a functor providing if necessary
+		unknown
+    };
+
     /*!
       \brief This class is used to specify boundary conditions for all operators
       \ingroup mrabcext
