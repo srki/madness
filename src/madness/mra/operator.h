@@ -127,6 +127,7 @@ namespace madness {
         Timer timer_full;
         Timer timer_low_transf;
         Timer timer_low_accumulate;
+        Timer timer_stats_accumulate;
 
         // if this is a Slater-type convolution kernel: 1-exp(-mu r12)/(2 mu)
         bool is_slaterf12;
@@ -1029,6 +1030,7 @@ namespace madness {
                 timer_full.print("op full tensor       ");
                 timer_low_transf.print("op low rank transform");
                 timer_low_accumulate.print("op low rank addition ");
+                timer_stats_accumulate.print("op low rank addition final ranks ");
         	}
         }
 
@@ -1037,6 +1039,7 @@ namespace madness {
                 timer_full.reset();
                 timer_low_transf.reset();
                 timer_low_accumulate.reset();
+                timer_stats_accumulate.reset();
         	}
         }
 
@@ -1388,6 +1391,7 @@ namespace madness {
 
             double cpu1=cpu_time();
             timer_low_accumulate.accumulate(cpu1-cpu0);
+            timer_stats_accumulate.accumulate(result.rank());
             return result;
         }
 

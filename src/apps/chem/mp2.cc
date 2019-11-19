@@ -1362,7 +1362,12 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 	vphi.print_size("vphi: local parts");
 
 	// the part with the derivative operators: U1
-	const std::vector<real_function_6d> Drhs = truncate(grad(f));
+	std::vector<real_function_6d> Drhs(6);
+    for (int axis = 0; axis < 6; ++axis) {
+    	real_derivative_6d D = free_space_derivative<double, 6>(world,axis);
+    	Drhs[axis] = D(f).truncate();
+    }
+//	const std::vector<real_function_6d> Drhs = truncate(grad(f));
 	print_size(world,Drhs,"Drhs");
 
 	std::vector<real_function_3d> U1_6d;

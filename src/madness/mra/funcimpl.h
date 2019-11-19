@@ -4448,6 +4448,7 @@ namespace madness {
           if (p1) p1->compress(true,true,false,false);
           if (p2) p2->compress(true,true,false,false);	// fence here
           world.gop.fence();
+          print_size("in make_Vphi after compression");
           small=0;
           large=0;
 
