@@ -248,10 +248,12 @@ int test_Vphi_vpp(World& world, const long& k, const double thresh) {
     	    	.g12(f12);
     fii.fill_tree().truncate();
 
+    double wall0=wall_time();
     real_function_6d fii1=CompositeFactory<double,6,3>(world)
     	    	.V_for_particle1(copy(phi)).ket(fii);
     fii1.fill_tree().truncate();
-
+    double wall1=wall_time();
+    print("time in vket ",wall1-wall0);
     real_function_6d fii2=CompositeFactory<double,6,3>(world)
     	    	.particle1(copy(phi2))
     	    	.particle2(copy(phi))

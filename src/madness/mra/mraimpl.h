@@ -1734,18 +1734,30 @@ namespace madness {
     template <typename T, std::size_t NDIM>
     typename FunctionImpl<T,NDIM>::coeffT FunctionImpl<T,NDIM>::make_redundant_op(const keyT& key, const std::vector< Future<coeffT > >& v) {
 
-        // get the sum coefficients of this level given the sum coefficients of level n+1
+        tensorT d(cdata.v2k);
+        int i=0;
+        for (KeyChildIterator<NDIM> kit(key); kit; ++kit,++i) {
+            d(child_patch(kit.key())) += v[i].get().full_tensor_copy();
+        }
+        d = filter(d);
+
+        // tighter thresh for internal nodes
         TensorArgs targs2=targs;
         targs2.thresh*=0.1;
-        coeffT s(this->downsample(key,v),targs2);
 
-        // insert sum coefficients into tree
+        // need the deep copy for contiguity
+        coeffT s=coeffT(copy(d(cdata.s0)),targs2);
+        d(cdata.s0)=0.0;
+        double dnorm=d.normf();
+
         typename dcT::accessor acc;
         const auto found = coeffs.find(acc, key);
         MADNESS_CHECK(found);
-        MADNESS_ASSERT(not (acc->second.has_coeff()));
-        acc->second.set_coeff(s);
 
+        acc->second.set_coeff(s);
+        acc->second.set_dnorm(dnorm);
+
+        // return sum coefficients
         return s;
     }
 
@@ -3182,7 +3194,10 @@ namespace madness {
         }
         else {
             Future<coeffT > result(node.coeff());
-            if (!keepleaves) node.clear_coeff();
+            if (!keepleaves) {
+            	node.clear_coeff();
+            }
+        	node.set_dnorm(0.0);
             return result;
         }
     }
