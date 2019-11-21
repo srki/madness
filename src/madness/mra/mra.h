@@ -1634,9 +1634,10 @@ namespace madness {
         }
 
         /// reduce the rank of the coefficient tensors
-        Function<T,NDIM>& reduce_rank(const bool fence=true) {
+        Function<T,NDIM>& reduce_rank(const double thresh=0.0, const bool fence=true) {
             verify();
-            impl->reduce_rank(impl->get_tensor_args(),fence);
+            double thresh1= (thresh==0.0) ? impl->get_tensor_args().thresh : thresh;
+            impl->reduce_rank(thresh1,fence);
             return *this;
         }
     };
@@ -2078,8 +2079,8 @@ namespace madness {
             bool print_timings=true;
             Function<TENSOR_RESULT_TYPE(typename opT::opT,R), NDIM> r1;
 
-            result.set_impl(f, true); // ??????????????????
-            r1.set_impl(f, true); // ??????????????????
+            result.set_impl(f, false);
+            r1.set_impl(f, false);
 
             result.get_impl()->reset_timer();
             op.reset_timer();
@@ -2090,15 +2091,15 @@ namespace madness {
             //result.get_impl()->recursive_apply(op, f.get_impl().get(),
             //        r1.get_impl().get(),true);          // will fence here
 
-           	result.world().gop.fence();
-           	result.print_size("result before finalization");
-            double time=result.get_impl()->finalize_apply(fence);   // need fence before reconstruction
-           	result.world().gop.fence();
-            if (print_timings) {
-                result.get_impl()->print_timer();
-                op.print_timer();
-                if (result.world().rank()==0) print("time in finlize_apply", time);
-            }
+//           	result.world().gop.fence();
+//           	result.print_size("result before finalization");
+//            double time=result.get_impl()->finalize_apply(fence);   // need fence before reconstruction
+//           	result.world().gop.fence();
+//            if (print_timings) {
+//                result.get_impl()->print_timer();
+//                op.print_timer();
+//                if (result.world().rank()==0) print("time in finlize_apply", time);
+//            }
 
         }
 
@@ -2152,7 +2153,19 @@ namespace madness {
                 fff.get_impl()->timer_compress_svd.print("compress_svd");
             }
             result = apply_only(op, fff, fence);
-            result.reconstruct();
+        	ff.world().gop.fence();
+
+        	// svd-tensors need some post-processing
+        	if (result.get_impl()->get_tensor_type()==TT_2D) {
+            	result.get_impl()->finalize_apply();
+			}
+			if (print_timings) {
+				result.get_impl()->print_timer();
+				op.print_timer();
+			}
+
+        	result.reconstruct();
+
 //            fff.clear();
             if (op.destructive()) {
             	ff.world().gop.fence();
@@ -2304,45 +2317,29 @@ namespace madness {
     /// @param[in]  particle    if g=g(1) or g=g(2)
     /// @return     h(1,2) = f(1,2) * g(p)
     template<typename T, std::size_t NDIM, std::size_t LDIM>
-    Function<T,NDIM> multiply(const Function<T,NDIM> f, const Function<T,LDIM> g, const int particle, const bool fence=true) {
+    Function<T,NDIM> multiply(const Function<T,NDIM> f, const Function<T,LDIM> g,
+    		const int particle, const bool fence=true) {
 
         MADNESS_ASSERT(LDIM+LDIM==NDIM);
         MADNESS_ASSERT(particle==1 or particle==2);
 
         Function<T,NDIM> result;
-        result.set_impl(f, true); // ???????????????????????????????????????????????????
+        result.set_impl(f, false);
 
-        Function<T,NDIM>& ff = const_cast< Function<T,NDIM>& >(f);
-        Function<T,LDIM>& gg = const_cast< Function<T,LDIM>& >(g);
+//        Function<T,NDIM>& ff = const_cast< Function<T,NDIM>& >(f);
+//        Function<T,LDIM>& gg = const_cast< Function<T,LDIM>& >(g);
 
-        if (0) {
-        	gg.make_nonstandard(true,false);
-        	ff.make_nonstandard(true,false);
-        	result.world().gop.fence();
+		FunctionImpl<T,NDIM>* fimpl=f.get_impl().get();
+		FunctionImpl<T,LDIM>* gimpl=g.get_impl().get();
+		gimpl->make_redundant(true);
+		fimpl->make_redundant(false);
+		result.world().gop.fence();
 
-        	result.get_impl()->multiply(ff.get_impl().get(),gg.get_impl().get(),particle);
-        	result.world().gop.fence();
+		result.get_impl()->multiply(fimpl,gimpl,particle);
+		result.world().gop.fence();
 
-        	gg.standard(false);
-        	ff.standard(false);
-        	result.world().gop.fence();
-
-        } else {
-        	FunctionImpl<T,NDIM>* fimpl=ff.get_impl().get();
-        	FunctionImpl<T,LDIM>* gimpl=gg.get_impl().get();
-        	gimpl->make_redundant(true);
-        	fimpl->make_redundant(false);
-        	result.world().gop.fence();
-
-        	result.get_impl()->multiply(fimpl,gimpl,particle);
-        	result.world().gop.fence();
-
-        	fimpl->undo_redundant(false);
-        	gimpl->undo_redundant(fence);
-        }
-
-//        if (particle==1) result.print_size("finished multiplication f(1,2)*g(1)");
-//        if (particle==2) result.print_size("finished multiplication f(1,2)*g(2)");
+		fimpl->undo_redundant(false);
+		gimpl->undo_redundant(fence);
 
         return result;
     }

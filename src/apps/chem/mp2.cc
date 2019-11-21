@@ -1128,25 +1128,30 @@ real_function_3d MP2::K(const real_function_3d& phi, const bool hc) const {
 /// @param[in]	phi the pair function
 /// @param[in]	is_symmetric is the function symmetric wrt particle exchange
 /// @return 	(K1 + K2) |phi >
-real_function_6d MP2::K(const real_function_6d& phi,
-		const bool is_symmetric) const {
-	real_function_6d result = real_factory_6d(world);
-	// loop over all orbitals of the reference
-	for (int i = 0; i < hf->nocc(); ++i) {
-		real_function_6d tmp;
-		if (param.read_somefunction("tmp")) {
-			load_function(tmp,"tmp");
-		} else {
-				tmp= apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 1);
-				save_function(tmp,"tmp");
-		}
-		if (is_symmetric) {
-			tmp = tmp + swap_particles(tmp);
-		} else {
-			tmp = tmp + apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 2);
-		}
-		result = (result + tmp).truncate();
+real_function_6d MP2::K(const real_function_6d& phi, const bool is_symmetric) const {
+
+	// first particle 1
+	real_function_6d result=apply_exchange_vector(phi,1);
+	if (is_symmetric) {
+		result = result + swap_particles(result);
+	} else {
+		result = result + apply_exchange_vector(phi,2);
 	}
+	result.truncate();
+
+
+//	real_function_6d result = real_factory_6d(world);
+//	// loop over all orbitals of the reference
+//	for (int i = 0; i < hf->nocc(); ++i) {
+//		real_function_6d tmp;
+//		tmp= apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 1);
+//		if (is_symmetric) {
+//			tmp = tmp + swap_particles(tmp);
+//		} else {
+//			tmp = tmp + apply_exchange(phi, hf->nemo(i), hf->R2orbitals()[i], 2);
+//		}
+//		result = (result + tmp).truncate();
+//	}
 	return result;
 }
 
@@ -1157,6 +1162,69 @@ real_function_6d MP2::K(const real_function_6d& phi,
 real_function_3d MP2::J(const real_function_3d& phi) const {
 	return (hf->get_coulomb_potential() * phi).truncate();
 }
+
+
+real_function_6d MP2::apply_exchange_vector(const real_function_6d& phi,
+		const int particle) const {
+
+	Nemo::timer timer(world);
+	// prepare all constituent functions
+	std::vector<real_function_3d> ket=copy(world,hf->nemos());
+	std::vector<real_function_3d> bra=copy(world,hf->R2orbitals());
+	phi.get_impl()->make_redundant(false);
+	make_redundant(world,ket,false);
+	make_redundant(world,bra,false);
+	world.gop.fence();
+	timer.tag("prepare K");
+
+	// multiply pair function with bra
+	std::vector<real_function_6d> result1(hf->nocc());
+	for (auto& r : result1) r.set_impl(phi);
+	for (int i=0; i<hf->nocc(); ++i) {
+		result1[i].get_impl()->multiply(phi.get_impl().get(),bra[i].get_impl().get(),particle);
+	}
+	world.gop.fence();
+    truncate(world,result1);
+    reduce_rank(result1);
+
+	timer.tag("multiply bra");
+	print_size(world,result1,"after multiplication and truncation");
+
+	// apply exchange operator
+	real_convolution_3d op = CoulombOperator(world, 0.0001,
+			hf->get_calc().param.econv());
+	op.particle() = particle;
+	op.destructive()=true;
+
+    std::vector<real_function_6d> result2=apply(world,op,result1);
+	timer.tag("apply Green's function");
+
+	truncate(world,result2);
+    for (auto& v : result2) v.reduce_rank(false);
+	world.gop.fence();
+
+	timer.tag("truncate");
+	print_size(world,result2,"after truncate");
+
+	// multiply with ket
+	std::vector<real_function_6d> result3(hf->nocc());
+	make_redundant(world,result2);
+	for (auto& r : result3) r.set_impl(phi);
+	for (int i=0; i<hf->nocc(); ++i) {
+		result3[i].get_impl()->multiply(result2[i].get_impl().get(),ket[i].get_impl().get(),particle);
+	}
+
+	world.gop.fence();
+    truncate(result3);
+    reduce_rank(result3);
+	timer.tag("multiply ket");
+
+	real_function_6d result4=real_factory_6d(world);
+	for (auto r : result3) result4=result4+r;
+	timer.tag("add all up");
+	return result4;
+}
+
 
 /// apply the exchange operator on f
 

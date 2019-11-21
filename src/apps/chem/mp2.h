@@ -621,6 +621,9 @@ namespace madness {
         /// @return 	Jphi
         real_function_3d J(const real_function_3d& phi) const;
 
+        real_function_6d apply_exchange_vector(const real_function_6d& f,
+        		const int particle) const;
+
         /// apply the exchange operator on f
 
         /// if the exchange operator is similarity transformed (R-1 K R) the

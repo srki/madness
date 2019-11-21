@@ -4112,6 +4112,8 @@ private:
         			result1+=pm(key,copy(ceri(result->cdata.s0)));
         			cresult=coeffT(result1,result->get_tensor_args());
         			error+=pm.error;
+        		} else {
+        			cresult.reduce_rank(result->get_tensor_args().thresh);
         		}
         		if ((not have_v1()) and (not have_v2()) and (not have_eri())) {
         			cresult=coeff_ket;
@@ -4259,7 +4261,7 @@ private:
         /// reduce the rank of the coefficients tensors
 
         /// @param[in]  targs   target tensor arguments (threshold and full/low rank)
-        void reduce_rank(const TensorArgs& targs, bool fence);
+        void reduce_rank(const double thresh, bool fence);
 
         T eval_cube(Level n, coordT& x, const tensorT& c) const;
 

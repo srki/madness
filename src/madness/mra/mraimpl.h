@@ -1204,8 +1204,8 @@ namespace madness {
 
     /// @param[in]  targs   target tensor arguments (threshold and full/low rank)
     template <typename T, std::size_t NDIM>
-    void FunctionImpl<T,NDIM>::reduce_rank(const TensorArgs& targs, bool fence) {
-        flo_unary_op_node_inplace(do_reduce_rank(targs),fence);
+    void FunctionImpl<T,NDIM>::reduce_rank(const double thresh, bool fence) {
+        flo_unary_op_node_inplace(do_reduce_rank(thresh),fence);
     }
 
 
@@ -1480,10 +1480,14 @@ namespace madness {
 
     template <typename T, std::size_t NDIM>
     void FunctionImpl<T,NDIM>::reconstruct(bool fence) {
-        // Must set true here so that successive calls without fence do the right thing
-        MADNESS_ASSERT(not is_redundant());
+
+    	if (is_redundant()) {
+    		this->undo_redundant(fence);
+    		return;
+    	}
+
+    	// Must set true here so that successive calls without fence do the right thing
         set_tree_state(reconstructed);
-//        nonstandard = compressed = redundant = false;
         if (world.rank() == coeffs.owner(cdata.key0))
             woT::task(world.rank(), &implT::reconstruct_op, cdata.key0,coeffT());
         if (fence)
