@@ -1388,7 +1388,7 @@ namespace madness {
             result0=reduce(r0_list,tol2*rank);
             if (r_list.size()>0) r_list.front()(s0)+=result0;
             result=reduce(r_list,tol2*rank);
-            result.reduce_rank(tol2*rank);
+//            result.reduce_rank(tol2*rank);
 
             double cpu1=cpu_time();
             timer_low_accumulate.accumulate(cpu1-cpu0);
