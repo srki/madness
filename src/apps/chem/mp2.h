@@ -371,6 +371,7 @@ namespace madness {
         		initialize<int>("maxsub",2);
         		initialize<bool>("restart",false);
         		initialize<int>("maxiter",5);
+        		initialize<double>("rank_ratio",0.05);
         		initialize<std::vector<std::string> >("read_functions",{""},"read functions instead of calculate them");
 
         		read_and_set_derived_values(world);
@@ -382,6 +383,7 @@ namespace madness {
         	void read_and_set_derived_values(World& world) {
         		read(world,"input","mp2");
         		set_derived_value("dconv",sqrt(get<double>("econv"))*0.1);
+        		set_derived_value("thresh",get<double>("econv"));
         	}
 
             /// check the user input
@@ -401,6 +403,7 @@ namespace madness {
         	int restart() const {return this->get<bool>("restart");}	/// convenience function
         	int maxiter() const {return this->get<int>("maxiter");}	/// convenience function
         	int maxsub() const {return this->get<int>("maxsub");}	/// convenience function
+        	double rank_ratio() const {return get<double>("rank_ratio");}
 
         	bool read_Uphi0() const {
         		std::vector<std::string> v=get<std::vector<std::string> >("read_functions");

@@ -865,6 +865,7 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 	const double eps = zeroth_order_energy(i, j);
 	real_convolution_6d green = BSHOperator<6>(world, sqrt(-2.0 * eps), lo,
 			bsh_eps);
+	green.rank_ratio=param.rank_ratio();
 
 	real_function_6d Uphi0,KffKphi0;
 	if (param.read_Uphi0()) {

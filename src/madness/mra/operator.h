@@ -132,6 +132,7 @@ namespace madness {
         // if this is a Slater-type convolution kernel: 1-exp(-mu r12)/(2 mu)
         bool is_slaterf12;
         double mu_;
+        double rank_ratio=0.05;
 
     private:
 
@@ -1427,6 +1428,9 @@ namespace madness {
             double full_cost=0.0;
             double low_cost=0.0;
 
+            long initial_rank=0;
+            long final_rank=sqrt(coeff.size())*0.05;	// size=ncol*nrow; final rank is 5% of max rank
+
             for (int mu=0; mu<rank; ++mu) {
                 const SeparatedConvolutionInternal<Q,NDIM>& muop =  op->muops[mu];
 
@@ -1436,11 +1440,13 @@ namespace madness {
                     long nterms=SRConf<T>::max_sigma(tol2/muop.norm,coeff.rank(),coeff.get_svdtensor().weights_)+1;
 
                     // take only the first overlap computation of rank reduction into account
-                    low_cost+=nterms*low_operator_cost + 2.0*nterms*nterms*low_reduction_cost;
+//                    low_cost+=nterms*low_operator_cost + 2.0*nterms*nterms*low_reduction_cost;
+                    initial_rank+=nterms;
 
                     full_cost+=full_operator_cost;
                 }
             }
+            low_cost=initial_rank*low_operator_cost + initial_rank*final_rank*low_reduction_cost;
 
             // include random empirical factor of 2
             double ratio=-1.0;
