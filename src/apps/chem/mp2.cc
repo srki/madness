@@ -284,6 +284,7 @@ void MP2::solve_residual_equations(ElectronPair& result,
 	if (world.rank()==0) print("eps in green:  ", eps);
 	real_convolution_6d green = BSHOperator<6>(world, sqrt(-2 * eps), lo,
 			bsh_eps);
+	green.destructive()=true;
 	if(world.rank() == 0) std::cout << "Constructed Green Operator is destructive ? :" << green.destructive() << std::endl;
 
 	NonlinearSolverND<6> solver(param.maxsub());
@@ -692,13 +693,6 @@ real_function_6d MP2::make_Uphi0(ElectronPair& pair) const {
 			const real_function_3d u1_nuc_nemo_i = u1_nuc * hf->nemo(i);
 			const real_function_3d u1_nuc_nemo_j = u1_nuc * hf->nemo(j);
 			const real_function_6d u1_el = corrfac.U1(axis);
-			//						u1_nuc.print_size("u1_nuc");
-			//						plot_plane(world,u1_nuc,"u1_nuc");
-			//						u1_nuc_nemo_i.print_size("u1_nuc_nemo_i");
-			//						plot_plane(world,u1_nuc_nemo_i,"u1_nuc_nemo_i");
-			//						plot_plane(world,hf->nemo(i),"nemo_i");
-			//						u1_nuc_nemo_j.print_size("u1_nuc_nemo_j");
-			//						u1_el.print_size("u1_el");
 
 			real_function_6d U1_mix1 =
 					CompositeFactory<double, 6, 3>(world).g12(u1_el).particle1(
@@ -724,7 +718,6 @@ real_function_6d MP2::make_Uphi0(ElectronPair& pair) const {
 			// multiply with -1 from the kinetic energy operator
 			//						Uphi0=(Uphi0+(U1_mix1-U1_mix2).scale(-1.0)).truncate();
 			Uphi0 = (Uphi0 + diff).truncate();
-			this->asymmetry(Uphi0, "Uphi0 in R");
 
 			//						Uphi0.print_size("Uphi0");
 			//						plot_plane(world,Uphi0,"Uphi0");

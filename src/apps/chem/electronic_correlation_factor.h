@@ -79,6 +79,7 @@ public:
     /// apply Kutzelnigg's regularized potential to an orbital product
     real_function_6d apply_U(const real_function_3d& phi_i, const real_function_3d& phi_j,
     		const real_convolution_6d& op_mod, const bool symmetric=false) const {
+
     	if(not op_mod.modified()) MADNESS_EXCEPTION("ElectronicCorrelationFactor::apply_U, op_mod must be in modified_NS form",1);
     	const double thresh = FunctionDefaults<6>::get_thresh();
     	const bool debug = false;
@@ -86,7 +87,6 @@ public:
 
     	real_function_6d result=real_factory_6d(world);
     	for (int axis=0; axis<3; ++axis) {
-        	double wall0=wall_time();
     		//if (world.rank()==0) print("working on axis",axis);
     		real_derivative_3d D = free_space_derivative<double,3>(world, axis);
     		const real_function_3d Di=(D(phi_i)).truncate();
@@ -95,16 +95,9 @@ public:
     		else Dj=(D(phi_j)).truncate();
 
     		real_function_6d u=U1(axis);
-    		double wall1=wall_time();
-    		printf("wall time in prep U %12.8f\n",wall1-wall0);
-    		wall0=wall1;
-
     		real_function_6d tmp1=CompositeFactory<double,6,3>(world)
                         		.g12(u).particle1(copy(Di)).particle2(copy(phi_j)).thresh(thresh);
     		tmp1.fill_cuspy_tree(op_mod).truncate();
-    		wall1=wall_time();
-    		printf("wall time in fill_tree 1 %12.8f\n",wall1-wall0);
-    		wall0=wall1;
 
     		real_function_6d tmp2;
     		if(symmetric) tmp2 = -1.0*swap_particles(tmp1);
@@ -113,23 +106,15 @@ public:
                                     		.g12(u).particle1(copy(phi_i)).particle2(copy(Dj)).thresh(thresh);
     			tmp2.fill_cuspy_tree(op_mod).truncate();
     		}
-    		wall1=wall_time();
-    		printf("wall time in fill_tree 2 %12.8f\n",wall1-wall0);
-    		wall0=wall1;
 
     		result=result+(tmp1-tmp2).truncate();
-    		wall1=wall_time();
-    		printf("wall time in add %12.8f\n",wall1-wall0);
-    		wall0=wall1;
 
 
     		tmp1.clear();
     		tmp2.clear();
     		world.gop.fence();
     		result.truncate().reduce_rank();
-
     	}
-		double wall0=wall_time();
 
     	// include the purely local potential that (partially) cancels 1/r12
     	if (_gamma>0.0) {
@@ -142,8 +127,6 @@ public:
 
     		result=(result+mul).truncate().reduce_rank();
     	}
-		double wall1=wall_time();
-		printf("wall time in U2 %12.8f\n",wall1-wall0);
 
     	if(debug) result.print_size("Ue|ij>");
     	return result;
