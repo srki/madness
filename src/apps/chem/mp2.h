@@ -371,7 +371,8 @@ namespace madness {
         		initialize<int>("maxsub",2);
         		initialize<bool>("restart",false);
         		initialize<int>("maxiter",5);
-        		initialize<double>("rank_ratio",0.05);
+        		initialize<double>("rank_ratio",0.05,"rank ratio");
+        		initialize<std::string>("reduction_alg","divide_conquer","red alg",{"divide_conquer","full","RMD"});
         		initialize<std::vector<std::string> >("read_functions",{""},"read functions instead of calculate them");
 
         		read_and_set_derived_values(world);

@@ -185,7 +185,7 @@ public:
     		SVDTensor<T> tmp=SVDTensor<T>::concatenate(addends);
     		Tensor<T> full=tmp.reconstruct();
     		return SVDTensor<T>(full,eps);
-    	} else if (ref.reduction_algorithm()=="RMD") {
+    	} else if (ref.reduction_algorithm()=="rmd") {
     		SVDTensor<T> result=SVDTensor<T>::concatenate(addends);
     		result.orthonormalize_random(eps);
     		return result;

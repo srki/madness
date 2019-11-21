@@ -123,7 +123,8 @@ MP2::MP2(World& world, const std::string& input) : world(world),
 		// factor depends on the coordinates and must be reassigned for
 		// for each geometric structure
 		corrfac = CorrelationFactor(world, 1.0, dcut, calc->molecule);
-
+		SVDTensor<double>::set_reduction_algorithm(param.get<std::string>("reduction_alg"));
+		print("reduction algorithm",SVDTensor<double>::reduction_algorithm());
 	}
 
 
