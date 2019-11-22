@@ -1184,6 +1184,7 @@ real_function_6d MP2::apply_exchange_vector(const real_function_6d& phi,
 		result1[i].get_impl()->multiply(phi.get_impl().get(),bra[i].get_impl().get(),particle);
 	}
 	world.gop.fence();
+	phi.get_impl()->undo_redundant(false);
     truncate(world,result1);
     reduce_rank(result1);
 
@@ -1412,8 +1413,6 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 	real_function_3d v_local = hf->get_coulomb_potential()
 								+ hf->nemo_calc.nuclear_correlation->U2();
 
-	v_local.print_size("vlocal");
-
 	// screen the construction of Vphi: do only what is needed to
 	// get an accurate result of the BSH operator
 	const double eps = zeroth_order_energy(i, j);
@@ -1431,16 +1430,12 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
     	Drhs[axis] = D(f).truncate();
     }
 //	const std::vector<real_function_6d> Drhs = truncate(grad(f));
-	print_size(world,Drhs,"Drhs");
 
 	std::vector<real_function_3d> U1_6d;
 	for (int axis = 0; axis < 6; ++axis) {
 		// note integer arithmetic
-//		if (world.rank() == 0) print("axis, axis^%3, axis/3+1", axis, axis % 3, axis / 3 + 1);
 		U1_6d.push_back(copy(hf->nemo_calc.nuclear_correlation->U1(axis % 3)));
 	}
-	print_size(world,U1_6d,"U1_6d");
-
 
 	double tight_thresh = std::min(FunctionDefaults<6>::get_thresh(), 1.e-4);
 	std::vector<real_function_6d> x(6);
@@ -1456,8 +1451,13 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 		}
 	}
 	world.gop.fence();
+	for (auto xx : x) {
+		CompositeFunctorInterface<double, 6, 3>* func=
+				dynamic_cast<CompositeFunctorInterface<double, 6, 3>* >(&(*xx.get_impl()->get_functor()));
+		func->make_redundant(false);
+	}
+	world.gop.fence();
 	for (auto xx : x) xx.fill_tree(op_mod,false);
-//	x.fill_tree(op_mod);
 	world.gop.fence();
 	print_size(world,x,"x after fill_tree");
 
@@ -1471,7 +1471,6 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 	// and the exchange
 	START_TIMER(world);
 	vphi = (vphi - K(f, i == j)).truncate().reduce_rank();
-	asymmetry(vphi, "U+J-K");
 	vphi.print_size("(U_nuc + J - K) |ket>:  made V tree");
 	END_TIMER(world, "apply K |ket>");
 

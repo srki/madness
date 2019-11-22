@@ -4179,7 +4179,13 @@ private:
         			dynamic_cast<CompositeFunctorInterface<T,NDIM,LDIM>* >(&(*func2));
         	MADNESS_ASSERT(func);
 
-        	func->make_redundant(true);
+        	// make sure everything is in place if no fence is requested
+        	if (not fence) {
+        		if (not func->check_redundant())
+        			MADNESS_EXCEPTION("make_Vphi requires redundant functions",1);
+        	} else {
+            	func->make_redundant(true);
+        	}
         	coeffs.clear();
 
         	FunctionImpl<T,NDIM>* ket=func->impl_ket.get();

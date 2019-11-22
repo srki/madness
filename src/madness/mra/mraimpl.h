@@ -1548,7 +1548,6 @@ namespace madness {
 
         if (!is_redundant()) return;
         tree_state=reconstructed;
-//        redundant = compressed = nonstandard = false;
         flo_unary_op_node_inplace(remove_internal_coeffs(),fence);
     }
 
