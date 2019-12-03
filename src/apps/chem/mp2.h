@@ -378,7 +378,7 @@ namespace madness {
         		read_and_set_derived_values(world);
 
         		// print final parameters
-        		if (world.rank()==0) print("mp2","end");
+//        		if (world.rank()==0) print("mp2","end");
         	}
 
         	void read_and_set_derived_values(World& world) {
@@ -453,7 +453,9 @@ namespace madness {
 
 
         World& world;                           ///< the world
+	public:
         Parameters param;						///< SCF parameters for MP2
+	private:
         std::shared_ptr<HartreeFock> hf;        ///< our reference
         CorrelationFactor corrfac;              ///< correlation factor: Slater
         std::shared_ptr<NuclearCorrelationFactor> nuclear_corrfac;

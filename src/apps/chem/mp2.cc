@@ -124,15 +124,14 @@ MP2::MP2(World& world, const std::string& input) : world(world),
 		// for each geometric structure
 		corrfac = CorrelationFactor(world, 1.0, dcut, calc->molecule);
 		SVDTensor<double>::set_reduction_algorithm(param.get<std::string>("reduction_alg"));
-		print("reduction algorithm",SVDTensor<double>::reduction_algorithm());
 	}
 
-
-	// print some output for the user
-	if (world.rank() == 0) {
-		hf->get_calc().param.print("reference");
-		param.print("mp2","mp2_end");
-	}
+//
+//	// print some output for the user
+//	if (world.rank() == 0) {
+//		hf->get_calc().param.print("dft","end");
+//		param.print("mp2","end");
+//	}
 
 	// check the user input for consistency
 	param.check_input(hf);

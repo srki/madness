@@ -133,8 +133,6 @@ public:
 	        Q.screen(trantol); // ???? Is this really needed?
 	        nemo = transform(world, nemo, Q, trantol, true);
 	        truncate(world, nemo);
-	        if (world.rank() == 0) print("ORTHOG2: maxq trantol", maxq, trantol);
-
 	    } while (maxq>0.01);
 	    normalize(nemo);
 	}

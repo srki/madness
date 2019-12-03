@@ -103,14 +103,13 @@ Nemo::Nemo(World& world, std::shared_ptr<SCF> calc, const std::string inputfile)
     if (world.rank()==0) param.read(world,inputfile,"dft");
     world.gop.broadcast_serializable(param, 0);
 
-
     symmetry_projector=projector_irrep(calc->param.pointgroup())
     		.set_ordering("keep").set_verbosity(0).set_orthonormalize_irreps(true);;
     if (world.rank()==0) print("constructed symmetry operator for point group",
     		symmetry_projector.get_pointgroup());
 	if (symmetry_projector.get_verbosity()>1) symmetry_projector.print_character_table();
 
-	param.print("dft","end");
+//	param.print("dft","end");
 }
 
 
@@ -345,10 +344,6 @@ double Nemo::solve(const SCFProtocol& proto) {
 		truncate(world, tmp);
 		END_TIMER(world, "apply BSH");
 
-		double n1=norm2(world,nemo);
-		double n2=norm2(world,tmp);
-		print("norm of nemo and GVnemo; ratio ",n1,n2,n1/n2);
-
 		// compute the residuals
 		vecfuncT residual = sub(world, nemo, tmp);
 		const double norm = norm2(world, residual) / sqrt(nemo.size());
@@ -374,9 +369,9 @@ double Nemo::solve(const SCFProtocol& proto) {
 		if (calc->param.save()) calc->save_mos(world);
 
 		if (world.rank() == 0) {
-			printf("finished iteration %2d at time %8.1fs with energy %12.8f\n",
+			print("current residual norm  ", norm);
+			printf("finished iteration %2d at time %8.1fs with energy %12.8f\n\n",
 					iter, wall_time(), energy);
-			print("current residual norm  ", norm, "\n");
 		}
 
 		if (converged) break;

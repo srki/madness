@@ -50,10 +50,9 @@ using namespace madness;
 int main(int argc, char** argv) {
     initialize(argc, argv);
     World world(SafeMPI::COMM_WORLD);
-    startup(world,argc,argv);
+    startup(world,argc,argv,true);
     std::cout.precision(6);
 
-//    print("git_version",git_version());
 #ifdef MADNESS_GITREVISION
     const std::string gitrevision(MADNESS_GITREVISION);
     const std::string timestamp(MADNESS_BUILD_TIMESTAMP);
@@ -98,6 +97,10 @@ int main(int argc, char** argv) {
 
     try {
     	MP2 mp2(world,"input");
+		if (world.rank() == 0) {
+			mp2.get_hf().get_calc().param.print("dft","end");
+			mp2.param.print("mp2","end");
+		}
 
     	if(world.rank() == 0) printf("\nstarting at time %.1fs\n", wall_time());
 
