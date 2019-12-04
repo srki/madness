@@ -3197,9 +3197,7 @@ namespace madness {
         }
         else {
             Future<coeffT > result(node.coeff());
-            if (!keepleaves) {
-            	node.clear_coeff();
-            }
+            if (!keepleaves) node.clear_coeff();
         	node.set_dnorm(0.0);
             return result;
         }

@@ -726,6 +726,8 @@ namespace madness {
             PROFILE_MEMBER_FUNC(Function);
             verify();
             if (impl->is_nonstandard()) return;
+            if (impl->is_nonstandard_with_leaves()) return;
+
             if (VERIFY_TREE) verify_tree();
             if (!is_reconstructed()) reconstruct();
             TreeState newstate=TreeState::nonstandard;
@@ -1095,9 +1097,6 @@ namespace madness {
           MADNESS_ASSERT(g.is_initialized());
           MADNESS_ASSERT(is_on_demand());
 
-          // clear what we have
-          impl->get_coeffs().clear();
-
           //leaf_op<T,NDIM> gnode_is_leaf(g.get_impl().get());
           Leaf_op_other<T,NDIM> gnode_is_leaf(g.get_impl().get());
           impl->make_Vphi(gnode_is_leaf,fence);
@@ -1111,8 +1110,6 @@ namespace madness {
         template<typename opT>
         Function<T,NDIM>& fill_tree(const opT& op, bool fence=true) {
           MADNESS_ASSERT(is_on_demand());
-          // clear what we have
-          impl->get_coeffs().clear();
           Specialbox_op<T,NDIM> sbox;
           Leaf_op<T,NDIM,opT,Specialbox_op<T,NDIM> > leaf_op(this->get_impl().get(),&op,sbox);
           impl ->make_Vphi(leaf_op,fence);
@@ -1122,8 +1119,6 @@ namespace madness {
         /// With this being an on-demand function, fill the MRA tree according to different criteria
         Function<T,NDIM>& fill_tree(bool fence=true) {
           MADNESS_ASSERT(is_on_demand());
-          // clear what we have
-          impl->get_coeffs().clear();
           Leaf_op<T,NDIM,SeparatedConvolution<double,NDIM>,Specialbox_op<T,NDIM> > leaf_op(this->get_impl().get());
           impl->make_Vphi(leaf_op,fence);
           return *this;
@@ -1134,8 +1129,6 @@ namespace madness {
         template<typename opT>
         Function<T,NDIM>& fill_cuspy_tree(const opT& op,const bool fence=true){
           MADNESS_ASSERT(is_on_demand());
-          // clear what we have
-          impl->get_coeffs().clear();
           ElectronCuspyBox_op<T,NDIM> sbox;
 
           Leaf_op<T,NDIM,opT,ElectronCuspyBox_op<T,NDIM> > leaf_op(this->get_impl().get(),&op,sbox);
@@ -1147,8 +1140,6 @@ namespace madness {
         /// Special refinement on 6D boxes where the electrons come close (meet)
         Function<T,NDIM>& fill_cuspy_tree(const bool fence=true){
           MADNESS_ASSERT(is_on_demand());
-          // clear what we have
-          impl->get_coeffs().clear();
           ElectronCuspyBox_op<T,NDIM> sbox;
 
           Leaf_op<T,NDIM,SeparatedConvolution<double,NDIM>,ElectronCuspyBox_op<T,NDIM> > leaf_op(this->get_impl().get(),sbox);
@@ -1162,8 +1153,6 @@ namespace madness {
         template<typename opT>
         Function<T,NDIM>& fill_nuclear_cuspy_tree(const opT& op,const size_t particle,const bool fence=true){
           MADNESS_ASSERT(is_on_demand());
-          // clear what we have
-          impl->get_coeffs().clear();
           NuclearCuspyBox_op<T,NDIM> sbox(particle);
 
           Leaf_op<T,NDIM,opT,NuclearCuspyBox_op<T,NDIM> > leaf_op(this->get_impl().get(),&op,sbox);
@@ -1175,8 +1164,6 @@ namespace madness {
         /// Special refinement on 6D boxes for the nuclear potentials (regularized with cusp, non-regularized with singularity)
         Function<T,NDIM>& fill_nuclear_cuspy_tree(const size_t particle,const bool fence=true){
           MADNESS_ASSERT(is_on_demand());
-          // clear what we have
-          impl->get_coeffs().clear();
           NuclearCuspyBox_op<T,NDIM> sbox(particle);
 
           Leaf_op<T,NDIM,SeparatedConvolution<double,NDIM>,NuclearCuspyBox_op<T,NDIM> > leaf_op(this->get_impl().get(),sbox);

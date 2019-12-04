@@ -168,6 +168,7 @@ namespace madness {
                 coeff() = copy(other.coeff());
                 _norm_tree = other._norm_tree;
                 _has_children = other._has_children;
+                dnorm=other.dnorm;
             }
             return *this;
         }
@@ -420,7 +421,7 @@ namespace madness {
 
         template <typename Archive>
         void serialize(Archive& ar) {
-            ar & coeff() & _has_children & _norm_tree;
+            ar & coeff() & _has_children & _norm_tree & dnorm;
         }
 
     };
@@ -684,7 +685,7 @@ namespace madness {
         bool is_leaf() const {return not _has_children;}
         template <typename Archive>
         void serialize(Archive& ar) {
-            ar & coeff() & _has_children;
+            ar & coeff() & _has_children & dnorm;
         }
     };
 
@@ -831,7 +832,7 @@ namespace madness {
     	/// serialization
         template <typename Archive> void serialize(const Archive& ar) {
             int il=int(is_leaf_);
-            ar & impl & key_ & il & coeff_;
+            ar & impl & key_ & il & coeff_ & dnorm_;
             is_leaf_=LeafStatus(il);
         }
     };
@@ -3867,7 +3868,7 @@ private:
         	}
 
             template <typename Archive> void serialize(const Archive& ar) {
-                ar & error & lo & lo1 & lo2 & hi & hi1& hi2 & gimpl & impl;
+                ar & error & lo & lo1 & lo2 & hi & hi1& hi2 & gimpl & impl & val_lhs & coeff_lhs;
             }
 
 
@@ -3915,7 +3916,7 @@ private:
         	/// make and insert the coefficients into result's tree
         	std::pair<bool,coeffT> operator()(const Key<NDIM>& key) const {
 
-
+        		MADNESS_ASSERT(result->get_coeffs().is_local(key));
         		if(leaf_op.do_pre_screening()){
         			// this means that we only construct the boxes which are leaf boxes from the other function in the leaf_op
         			if(leaf_op.pre_screening(key)){
@@ -4074,7 +4075,7 @@ private:
         		bool printme=(int(key.translation()[0])==int(std::pow(key.level(),2)/2)) and
         				(int(key.translation()[1])==int(std::pow(key.level(),2)/2)) and
 						(int(key.translation()[2])==int(std::pow(key.level(),2)/2));
-        		printme=false;
+//        		printme=false;
 
     			// get/make all coefficients
         		const coeffT coeff_ket = (iaket.get_impl()) ? iaket.coeff(key)
@@ -4186,7 +4187,6 @@ private:
         	} else {
             	func->make_redundant(true);
         	}
-        	coeffs.clear();
 
         	FunctionImpl<T,NDIM>* ket=func->impl_ket.get();
         	FunctionImpl<T,NDIM>* eri=func->impl_eri.get();
@@ -4210,34 +4210,30 @@ private:
         		FunctionImpl<T,LDIM>* v1, FunctionImpl<T,LDIM>* v2,
 				FunctionImpl<T,LDIM>* p1, FunctionImpl<T,LDIM>* p2,
 				FunctionImpl<T,NDIM>* eri,
-				const bool fence) {
+				const bool fence=true) {
 
-          if (world.rank() == coeffs.owner(cdata.key0)) {
+        	// prepare the CoeffTracker
+        	CoeffTracker<T,NDIM> iaket(ket);
+        	CoeffTracker<T,LDIM> iap1(p1);
+        	CoeffTracker<T,LDIM> iap2(p2);
+        	CoeffTracker<T,LDIM> iav1(v1);
+        	CoeffTracker<T,LDIM> iav2(v2);
 
-              // insert an empty internal node for comparison
-              this->coeffs.replace(cdata.key0,nodeT(coeffT(),true));
+        	// the operator making the coefficients
+        	typedef Vphi_op_NS<opT,LDIM> coeff_opT;
+        	coeff_opT coeff_op(this,leaf_op,iaket,iap1,iap2,iav1,iav2,eri);
 
-              // prepare the CoeffTracker
-              CoeffTracker<T,NDIM> iaket(ket);
-              CoeffTracker<T,LDIM> iap1(p1);
-              CoeffTracker<T,LDIM> iap2(p2);
-              CoeffTracker<T,LDIM> iav1(v1);
-              CoeffTracker<T,LDIM> iav2(v2);
+        	// this operator simply inserts the coeffs into this' tree
+        	typedef noop<T,NDIM> apply_opT;
+        	apply_opT apply_op;
 
-              // the operator making the coefficients
-              typedef Vphi_op_NS<opT,LDIM> coeff_opT;
-              coeff_opT coeff_op(this,leaf_op,iaket,iap1,iap2,iav1,iav2,eri);
+        	if (world.rank() == coeffs.owner(cdata.key0)) {
+        		woT::task(world.rank(), &implT:: template forward_traverse<coeff_opT,apply_opT>,
+        				coeff_op, apply_op, cdata.key0);
+        	}
 
-              // this operator simply inserts the coeffs into this' tree
-              typedef noop<T,NDIM> apply_opT;
-              apply_opT apply_op;
-
-              woT::task(world.rank(), &implT:: template forward_traverse<coeff_opT,apply_opT>,
-            		  coeff_op, apply_op, cdata.key0);
-          }
-
-          set_tree_state(reconstructed);
-          if (fence) world.gop.fence();
+        	set_tree_state(reconstructed);
+        	if (fence) world.gop.fence();
 
         }
 

@@ -38,17 +38,23 @@
 #include <madness/mra/mra.h>
 
 using namespace madness;
+static bool do_print0=false;
+template<typename T, typename... Ts>
+void print0(const T& t, const Ts&... ts) {
+	if (do_print0) print(t,ts...);
+}
+
 
 std::string ok(const bool b) {if (b) return "ok   "; return "fail ";};
 
 int check_small(const double val, const double eps, const std::string message) {
 	bool is_small=(fabs(val)<eps);
-	print(ok(is_small),val,message);
+	print0(ok(is_small),val,message);
 	return (is_small) ? 0 : 1;
 }
 
 int check(bool b, const std::string message) {
-	print(ok(b),message);
+	print0(ok(b),message);
 	return (b) ? 0 : 1;
 }
 
@@ -153,15 +159,16 @@ static double r2r(const coord_6d& r) {
 //}
 
 static double V(const Vector<double,3>& r) {
-  return -1.0/sqrt(r[0]*r[0]+r[1]*r[1]+r[2]*r[2]+1e-12);
+  return -1.0/sqrt(r[0]*r[0]+r[1]*r[1]+r[2]*r[2]+1e-8);
 }
 
 /// test f(1,2) = g(1) h(2)
 int test_hartree_product(World& world, const long& k, const double thresh) {
 
-	print("entering hartree_product");
+	print0("entering hartree_product");
 	int nerror=0;
 	bool good;
+	double wall0=wall_time();
 
     real_function_3d phi=real_factory_3d(world).f(gauss_3d);
     real_function_3d phisq=phi*phi;
@@ -171,11 +178,11 @@ int test_hartree_product(World& world, const long& k, const double thresh) {
         ij.truncate();
 
         double norm=ij.norm2();
-        print("norm(ij)",norm);
+        print0("norm(ij)",norm);
 
         double err=ij.err(gauss_6d);
         good=is_small(err,thresh);
-        print(ok(good), "hartree_product(phi,phi) error:",err);
+        print0(ok(good), "hartree_product(phi,phi) error:",err);
         if (not good) nerror++;
 
     }
@@ -184,18 +191,19 @@ int test_hartree_product(World& world, const long& k, const double thresh) {
         real_function_6d ij=hartree_product(phisq,phi);
         double err=ij.err(r2r);
         good=is_small(err,thresh);
-        print(ok(good), "hartree_product(phi^2,phi) error:",err);
+        print0(ok(good), "hartree_product(phi^2,phi) error:",err);
         if (not good) nerror++;
     }
 
-	print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
 	return nerror;
 }
 
 
 /// test construction of a function f(1,2) |p(1) p(2)>
 int test_Vphi_eri_pp(World& world, const long& k, const double thresh) {
-    print("entering Vphi_op f12|p1p2>");
+    print0("entering Vphi_op f12|p1p2>");
     int nerror=0;
 
     real_function_6d f12=TwoElectronFactory(world).f12().thresh(thresh).gamma(1.0).k(k+1);
@@ -209,32 +217,30 @@ int test_Vphi_eri_pp(World& world, const long& k, const double thresh) {
     	    	.g12(f12);
 
     fii.fill_tree().truncate();
-
 	real_function_6d bra =CompositeFactory<double, 6, 3>(world)
 				.particle1(copy(phi)).particle2(copy(phi));
 
 	const double a = inner(fii,bra);
-	print("<ii | f12 | ii> 6d: ",a);
-
+	print0("<ii | f12 | ii> 6d: ",a);
 	// make all the operators that we need
 	real_convolution_3d slaterf12 = SlaterF12Operator(world, 1.0, 1.e-5, 1.e-5);
 	real_function_3d fii1=slaterf12(phi2);
 	double b=inner(phi2,fii1);
 
-	print("<ii | f12 | ii> 3d: ",b);
+	print0("<ii | f12 | ii> 3d: ",b);
 
-	bool good=is_small(a-b,thresh);
-    print(ok(good), "CompositeFactory f(1,2)*|p(1) p(2>  error:",a-b);
+	bool good=is_small(fabs(a-b),thresh);
+    print0(ok(good), "CompositeFactory f(1,2)*|p(1) p(2>  error:",a-b);
 
     if (not good) nerror++;
 
-    print("all done\n");
+    print0("all done\n");
     return nerror;
 }
 
 /// test construction of a function v(1) |p(1,2)>
 int test_Vphi_vpp(World& world, const long& k, const double thresh) {
-    print("entering Vphi_op v(1)|f(1,2)");
+    print0("entering Vphi_op v(1)|f(1,2)");
     int nerror=0;
 
     real_function_6d f12=TwoElectronFactory(world).f12().thresh(thresh).gamma(1.0).k(k+1);
@@ -247,13 +253,14 @@ int test_Vphi_vpp(World& world, const long& k, const double thresh) {
     	    	.particle2(copy(phi))
     	    	.g12(f12);
     fii.fill_tree().truncate();
+
 
     double wall0=wall_time();
     real_function_6d fii1=CompositeFactory<double,6,3>(world)
     	    	.V_for_particle1(copy(phi)).ket(fii);
     fii1.fill_tree().truncate();
     double wall1=wall_time();
-    print("time in vket ",wall1-wall0);
+    print0("time in vket ",wall1-wall0);
     real_function_6d fii2=CompositeFactory<double,6,3>(world)
     	    	.particle1(copy(phi2))
     	    	.particle2(copy(phi))
@@ -263,30 +270,37 @@ int test_Vphi_vpp(World& world, const long& k, const double thresh) {
 
     // make the difference of the two functions
     real_function_6d diff=fii1-fii2;
+    save(diff,"diff");
 
     double error=diff.norm2();
 	bool good=is_small(error,thresh);
-    print(ok(good), "CompositeFactory v(1)|f(1,2)>  error:",error);
+    print0(ok(good), "CompositeFactory v(1)|f(1,2)>  error:",error);
 
     if (not good) nerror++;
 
-    print("all done\n");
+    print0("all done\n");
     return nerror;
 }
 
 int test_Vphi_op(World& world, const long& k, const double thresh) {
 	int nerror=0;
+    double wall0=wall_time();
 	nerror+=test_Vphi_eri_pp(world,k,thresh);
 	nerror+=test_Vphi_vpp(world,k,thresh);
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
+
 	return nerror;
 }
 
 /// test f(1,2)*g(1)
 int test_multiply(World& world, const long& k, const double thresh) {
 
-    print("entering multiply f(1,2)*g(1)");
+    print0("entering multiply f(1,2)*g(1)");
     int nerror=0;
     bool good;
+    double wall0=wall_time();
+
 
     real_function_6d f12=TwoElectronFactory(world).f12().thresh(thresh).gamma(1.0);
 
@@ -333,7 +347,7 @@ int test_multiply(World& world, const long& k, const double thresh) {
     iij1.print_size("multiply 1 truncated");
     double err=(fi2i-iij1).norm2();
     good=is_small(err,thresh);
-    print(ok(good), "multiply f(1,2)*g(1) error:",err);
+    print0(ok(good), "multiply f(1,2)*g(1) error:",err);
 
     {
         real_function_6d iij2=multiply(copy(fii),phi,2);
@@ -342,7 +356,7 @@ int test_multiply(World& world, const long& k, const double thresh) {
         iij2.print_size("multiply 2 truncated");
         double err=(fii2-iij2).norm2();
         good=is_small(err,thresh);
-        print(ok(good), "multiply f(1,2)*g(2) error:",err);
+        print0(ok(good), "multiply f(1,2)*g(2) error:",err);
     }
 
 
@@ -355,22 +369,24 @@ int test_multiply(World& world, const long& k, const double thresh) {
     iij3.print_size("CompositeFactory truncated");
 
     double err4=(fi2i-iij3).norm2();
-    print("error in CompositeFactory 1",err4);
+    print0("error in CompositeFactory 1",err4);
     good=is_small(err4,thresh);
-    print(ok(good), "CompositeFactory f(1,2)*g(1) error:",err4);
+    print0(ok(good), "CompositeFactory f(1,2)*g(1) error:",err4);
 
 
     if (not good) nerror++;
 
-    print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
     return nerror;
 }
 
 /// test f(1,2) + g(1,2) for both f and g reconstructed
 int test_add(World& world, const long& k, const double thresh) {
 
-    print("entering add");
+    print0("entering add");
     int nerror=0;
+    double wall0=wall_time();
 
     // simple test for 3d functions and different adding schemes
     real_function_3d one3=real_factory_3d(world).f(one_3d);
@@ -463,7 +479,8 @@ int test_add(World& world, const long& k, const double thresh) {
     	nerror+=check_small(error,1.5*thresh,"6d gaxpy_oop_reconstructed/operator+=/operator- note loosened threshold");
     }
 
-    print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
     return nerror;
 }
 
@@ -471,9 +488,10 @@ int test_add(World& world, const long& k, const double thresh) {
 /// test f(1,2) + g(1,2) for both f and g reconstructed
 int test_exchange(World& world, const long& k, const double thresh) {
 
-    print("entering exchange f(1,2)*g(1)");
+    print0("entering exchange f(1,2)*g(1)");
     int nerror=0;
     bool good;
+    double wall0=wall_time();
 
     double norm;
     real_function_3d phi=real_factory_3d(world).f(gauss_3d);
@@ -511,7 +529,7 @@ int test_exchange(World& world, const long& k, const double thresh) {
     norm=diff.norm2();
     if (world.rank()==0) print("diff norm",norm);
     good=is_small(norm,thresh);
-    print(ok(good), "exchange error:",norm);
+    print0(ok(good), "exchange error:",norm);
     if (not good) nerror++;
 
     // do only orbital
@@ -521,17 +539,18 @@ int test_exchange(World& world, const long& k, const double thresh) {
     if (world.rank()==0) print("J phi norm",norm);
 
 
-
-    print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
     return nerror;
 }
 
 /// test inner product using redundant wave functions
 int test_inner(World& world, const long& k, const double thresh) {
 
-    print("entering inner");
+    print0("entering inner");
     int nerror=0;
     bool good;
+    double wall0=wall_time();
 
     double norm;
     real_function_3d phi=real_factory_3d(world).f(gauss_3d);
@@ -546,10 +565,11 @@ int test_inner(World& world, const long& k, const double thresh) {
 
     if (world.rank()==0) print("diff norm",norm);
     good=is_small(norm,thresh);
-    print(ok(good), "inner error:",norm);
+    print0(ok(good), "inner error:",norm);
     if (not good) nerror++;
 
-    print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
     return nerror;
 }
 
@@ -557,9 +577,10 @@ int test_inner(World& world, const long& k, const double thresh) {
 /// test 6D convolution
 int test_convolution(World& world, const long& k, const double thresh) {
 
-    print("entering convolution");
+    print0("entering convolution");
     int nerror=0;
     bool good;
+    double wall0=wall_time();
 
     double eps=-0.5;
 
@@ -576,24 +597,24 @@ int test_convolution(World& world, const long& k, const double thresh) {
 
     	vphi=v*phi;
     	double PE=inner(vphi,phi);
-    	print("<phi | V | phi>: ",PE);
+//    	print0("<phi | V | phi>: ",PE);
 
     	real_derivative_3d Dx = free_space_derivative<double,3>(world,0);
     	Function<double,3> du = Dx(phi);
     	double KE = 3*0.5*(du.inner(du));
-    	print("<phi | T | phi>: ",KE);
-    	print("<phi | H | phi>: ",KE + PE);
+//    	print0("<phi | T | phi>: ",KE);
+//    	print0("<phi | H | phi>: ",KE + PE);
 
 
     	phi=green(-2.0*vphi);
     	double norm=phi.norm2();
     	phi.scale(1.0/norm);
-    	print("phi.norm2()",norm);
+//    	print0("phi.norm2()",norm);
     }
 
     vphi=v*phi;
     double PE=inner(vphi,phi);
-   	print("<phi | V | phi>: ",PE);
+//   	print0("<phi | V | phi>: ",PE);
 
     // solve the H-atom in 6D
     real_convolution_6d green6 = BSHOperator<6>(world, sqrt(-2.0*(eps+eps)), 1.e-8, 1.e-6);
@@ -603,17 +624,19 @@ int test_convolution(World& world, const long& k, const double thresh) {
 	world.gop.fence();
 
 	double a=result1.norm2();
-	if (world.rank()==0) print("<GVphi | GVphi> ",a);
+	print0("<GVphi | GVphi> ",a);
 
 	real_function_6d diff=result1-hartree_product(phi,phi);
 	double norm=diff.norm2();
 
     if (world.rank()==0) print("diff norm",norm);
     good=is_small(norm,thresh);
-    print(ok(good), "inner error:",norm);
+    print0(ok(good), "inner error:",norm);
     if (not good) nerror++;
 
-    print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
+
     return nerror;
 }
 
@@ -643,8 +666,9 @@ int test_replicate(World& world, const long& k, const double thresh) {
 
 int test(World& world, const long& k, const double thresh) {
 
-    print("entering test");
+    print0("entering test");
     int nerror=0;
+    double wall0=wall_time();
 
     typedef Key<3> keyT;
 
@@ -675,7 +699,7 @@ int test(World& world, const long& k, const double thresh) {
 
 		Tensor<double> diff=val2-val1.full_tensor_copy();
 		double error=diff.normf();
-		print("error in NScoeff2values",error);
+		print0("error in NScoeff2values",error);
     }
 
     {
@@ -698,7 +722,7 @@ int test(World& world, const long& k, const double thresh) {
 
 		Tensor<double> diff=val2-val1.full_tensor_copy();
 		double error=diff.normf();
-		print("error in Scoeff2values",error);
+		print0("error in Scoeff2values",error);
     }
 
     {
@@ -721,7 +745,7 @@ int test(World& world, const long& k, const double thresh) {
 
 		Tensor<double> diff=val2-val1.full_tensor_copy();
 		double error=diff.normf();
-		print("error in NS_fcube_for_mul",error);
+		print0("error in NS_fcube_for_mul",error);
     }
 
     {
@@ -732,12 +756,14 @@ int test(World& world, const long& k, const double thresh) {
 
 		Tensor<double> diff=val2.full_tensor_copy()-val1.full_tensor_copy();
 		double error=diff.normf();
-		print("error in values2NScoeffs(NScoeff2values)",error);
+		print0("error in values2NScoeffs(NScoeff2values)",error);
     }
 
-    print("all done\n");
+    double wall1=wall_time();
+	print0("all done in time",wall1-wall0,"s\n");
     return nerror;
 }
+
 
 
 int main(int argc, char**argv) {
@@ -745,13 +771,14 @@ int main(int argc, char**argv) {
     initialize(argc,argv);
     World world(SafeMPI::COMM_WORLD);
     srand(time(nullptr));
-    startup(world,argc,argv);
+    startup(world,argc,argv,true);
 
     // the parameters
     long k=5;
     double thresh=1.e-3;
     double L=16;
     TensorType tt=TT_2D;
+    if (world.rank()==0) do_print0=true;
 
     // override the default parameters
     for(int i = 1; i < argc; i++) {
@@ -785,27 +812,27 @@ int main(int argc, char**argv) {
     FunctionDefaults<6>::set_cubic_cell(-L/2,L/2);
     FunctionDefaults<6>::set_tensor_type(tt);
 
-    print("entering testsuite for 6-dimensional functions\n");
-    print("k            ",k);
-    print("thresh       ",thresh);
-    print("boxsize      ",L);
-    print("tensor type: ", FunctionDefaults<6>::get_tensor_type());
-    print("");
+    print0("entering testsuite for 6-dimensional functions\n");
+    print0("k            ",k);
+    print0("thresh       ",thresh);
+    print0("boxsize      ",L);
+    print0("tensor type: ", FunctionDefaults<6>::get_tensor_type());
+    print0("");
 
 
     int error=0;
 
-//    test(world,k,thresh);
-//    error+=test_hartree_product(world,k,thresh);
-//    error+=test_convolution(world,k,thresh);
+    test(world,k,thresh);
+    error+=test_hartree_product(world,k,thresh);
+    error+=test_convolution(world,k,thresh);
     error+=test_Vphi_op(world,k,thresh);
-//    error+=test_multiply(world,k,thresh);
-//    error+=test_add(world,k,thresh);
-//    error+=test_exchange(world,k,thresh);
-//    error+=test_inner(world,k,thresh);
+    error+=test_multiply(world,k,thresh);
+    error+=test_add(world,k,thresh);
+    error+=test_exchange(world,k,thresh);
+    error+=test_inner(world,k,thresh);
 //    error+=test_replicate(world,k,thresh);
 
-    print(ok(error==0),error,"finished test suite\n");
+    print0(ok(error==0),error,"finished test suite\n");
 //    WorldProfile::print(world);
 
     world.gop.fence();
