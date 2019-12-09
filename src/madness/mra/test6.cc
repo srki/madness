@@ -393,30 +393,33 @@ int test_add(World& world, const long& k, const double thresh) {
     real_function_3d gauss3=real_factory_3d(world).f(gauss_3d);
     real_function_3d gauss_plus_one3=real_factory_3d(world).f(gauss_plus_one_3d);
 
+    // computed precision of the error estimater
+    double error0=gauss3.err(gauss_3d);
+
     {
     	real_function_3d r1=one3+gauss3;
     	double error1=r1.err(gauss_plus_one_3d);
-    	nerror+=check_small(error1,thresh,"operator+");
+    	nerror+=check_small(error1,thresh+error0,"operator+");
     }
     {
     	real_function_3d r1=one3+gauss3;	// this has been checked before
     	real_function_3d r2=r1-gauss_plus_one3;
     	double error2=r2.err(zero_3d);
-    	nerror+=check_small(error2,thresh,"operator-");
+    	nerror+=check_small(error2,thresh+error0,"operator-");
     }
     {
     	one3.compress(); gauss3.compress();
     	real_function_3d r3=gaxpy_oop(1.0,one3,1.0,gauss3);
     	nerror+=check(r3.is_compressed(),"is compressed");
     	double error3=r3.err(gauss_plus_one_3d);
-    	nerror+=check_small(error3,thresh,"gaxpy_oop add");
+    	nerror+=check_small(error3,thresh+error0,"gaxpy_oop add");
     }
     {
     	one3.reconstruct(); gauss3.reconstruct();
     	real_function_3d r4=gaxpy_oop_reconstructed(1.0,one3,1.0,gauss3);
     	nerror+=check(!r4.is_compressed(),"is reconstructed");
     	double error4=r4.err(gauss_plus_one_3d);
-    	nerror+=check_small(error4,thresh,"gaxpy_oop_reconstructed");
+    	nerror+=check_small(error4,thresh+error0,"gaxpy_oop_reconstructed");
     }
     {
     	real_function_3d r=copy(one3);
@@ -424,7 +427,7 @@ int test_add(World& world, const long& k, const double thresh) {
     	r+=gauss3;
     	nerror+=check(r.is_compressed(),"is reconstructed");
     	double error1=r.err(gauss_plus_one_3d);
-    	nerror+=check_small(error1,thresh,"operator+=, compressed");
+    	nerror+=check_small(error1,thresh+error0,"operator+=, compressed");
     }
     {
     	real_function_3d r=copy(one3);
@@ -432,7 +435,7 @@ int test_add(World& world, const long& k, const double thresh) {
     	r+=gauss3;
     	nerror+=check(r.is_compressed(),"is reconstructed");
     	double error1=r.err(gauss_plus_one_3d);
-    	nerror+=check_small(error1,thresh,"operator+=, reconstructed");
+    	nerror+=check_small(error1,thresh+error0,"operator+=, reconstructed");
     }
     {
     	one3.reconstruct(); gauss3.reconstruct();
@@ -440,7 +443,7 @@ int test_add(World& world, const long& k, const double thresh) {
     	nerror+=check(!r.is_compressed(),"is reconstructed");
     	real_function_3d r2=one3-gauss3;
     	double error=(r-r2).norm2();
-    	nerror+=check_small(error,thresh,"gaxpy_oop_reconstructed subtract");
+    	nerror+=check_small(error,thresh+error0,"gaxpy_oop_reconstructed subtract");
     }
     {
     	real_function_3d r=copy(gauss3);
@@ -448,7 +451,7 @@ int test_add(World& world, const long& k, const double thresh) {
     	r.add_scalar(1.0);
     	nerror+=check(!r.is_compressed(),"is reconstructed");
     	double error1=r.err(gauss_plus_one_3d);
-    	nerror+=check_small(error1,thresh,"add_scalar");
+    	nerror+=check_small(error1,thresh+error0,"add_scalar");
     }
 
 
@@ -830,7 +833,7 @@ int main(int argc, char**argv) {
     error+=test_add(world,k,thresh);
     error+=test_exchange(world,k,thresh);
     error+=test_inner(world,k,thresh);
-//    error+=test_replicate(world,k,thresh);
+    error+=test_replicate(world,k,thresh);
 
     print0(ok(error==0),error,"finished test suite\n");
 //    WorldProfile::print(world);

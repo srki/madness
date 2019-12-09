@@ -644,6 +644,7 @@ namespace madness {
     	insert_op(implT* f) : impl(f) {}
     	insert_op(const insert_op& other) : impl(other.impl) {}
     	void operator()(const keyT& key, const coeffT& coeff, const bool& is_leaf) const {
+    		MADNESS_ASSERT(impl->get_coeffs().is_local(key));
             impl->get_coeffs().replace(key,nodeT(coeff,not is_leaf));
     	}
         template <typename Archive> void serialize (Archive& ar) {
@@ -745,7 +746,8 @@ namespace madness {
     	}
 
     	/// copy ctor
-    	CoeffTracker(const CoeffTracker& other) = default;
+    	CoeffTracker(const CoeffTracker& other) :impl(other.impl), key_(other.key_),
+    			is_leaf_(other.is_leaf_), coeff_(other.coeff_), dnorm_(other.dnorm_) {};
 
     	/// const reference to impl
     	const implT* get_impl() const {return impl;}
@@ -900,13 +902,7 @@ namespace madness {
         const FunctionCommonData<T,NDIM>& cdata;
 
         std::shared_ptr< FunctionFunctorInterface<T,NDIM> > functor;
-public:
-private:
         TreeState tree_state;
-//        bool on_demand; ///< does this function have an additional functor?
-//        bool compressed; ///< Compression status
-//        bool redundant; ///< If true, function keeps sum coefficients on all levels
-//        bool nonstandard; ///< If true, compress keeps scaling coeff
 
         dcT coeffs; ///< The coefficients
 
@@ -3257,10 +3253,10 @@ private:
             ctL g;
             int particle;       ///< if g is g(1) or g(2)
 
-            multiply_op() : particle(1) {}
+            multiply_op() : h(), f(), g(), particle(1) {}
 
-            multiply_op(implT* h, const ctT& f, const ctL& g, const int particle)
-                : h(h), f(f), g(g), particle(particle) {};
+            multiply_op(implT* h1, const ctT& f1, const ctL& g1, const int particle1)
+                : h(h1), f(f1), g(g1), particle(particle1) {};
 
             /// return true if this will be a leaf node
 
@@ -3268,6 +3264,8 @@ private:
             bool screen(const coeffT& fcoeff, const coeffT& gcoeff, const keyT& key) const {
                 MADNESS_ASSERT(gcoeff.is_full_tensor());
                 MADNESS_ASSERT(fcoeff.is_svd_tensor());
+                MADNESS_ASSERT(g.get_impl());
+                MADNESS_ASSERT(h);
 
                 double glo=0.0, ghi=0.0, flo=0.0, fhi=0.0;
                 g.get_impl()->tnorm(gcoeff.get_tensor(), &glo, &ghi);
@@ -3345,7 +3343,7 @@ private:
             }
 
             template <typename Archive> void serialize(const Archive& ar) {
-                ar & h & f & g;
+                ar & h & f & g & particle;
             }
         };
 
@@ -3414,25 +3412,22 @@ private:
         template<size_t LDIM>
         void multiply(const implT* f, const FunctionImpl<T,LDIM>* g, const int particle) {
 
+			CoeffTracker<T,NDIM> ff(f);
+			CoeffTracker<T,LDIM> gg(g);
+
+			typedef multiply_op<LDIM> coeff_opT;
+			coeff_opT coeff_op(this,ff,gg,particle);
+
+			typedef insert_op<T,NDIM> apply_opT;
+			apply_opT apply_op(this);
+
             keyT key0=f->cdata.key0;
-
-            if (world.rank() == coeffs.owner(key0)) {
-
-                CoeffTracker<T,NDIM> ff(f);
-                CoeffTracker<T,LDIM> gg(g);
-
-                typedef multiply_op<LDIM> coeff_opT;
-                coeff_opT coeff_op(this,ff,gg,particle);
-
-                typedef insert_op<T,NDIM> apply_opT;
-                apply_opT apply_op(this);
-
+			if (world.rank() == coeffs.owner(key0)) {
                 ProcessID p= coeffs.owner(key0);
                 woT::task(p, &implT:: template forward_traverse<coeff_opT,apply_opT>, coeff_op, apply_op, key0);
             }
 
             set_tree_state(reconstructed);
-//            this->compressed=false;
         }
 
         /// Hartree product of two LDIM functions to yield a NDIM = 2*LDIM function

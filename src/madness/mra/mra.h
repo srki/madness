@@ -2318,7 +2318,7 @@ namespace madness {
 
 		FunctionImpl<T,NDIM>* fimpl=f.get_impl().get();
 		FunctionImpl<T,LDIM>* gimpl=g.get_impl().get();
-		gimpl->make_redundant(true);
+		gimpl->make_redundant(false);
 		fimpl->make_redundant(false);
 		result.world().gop.fence();
 
@@ -2326,7 +2326,7 @@ namespace madness {
 		result.world().gop.fence();
 
 		fimpl->undo_redundant(false);
-		gimpl->undo_redundant(fence);
+		gimpl->undo_redundant(false);
 
         return result;
     }

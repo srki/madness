@@ -272,8 +272,8 @@ namespace madness {
         template <typename Archive>
         void serialize(Archive& ar) {
               	ar & weights_ & vector_[0] & vector_[1] & nci_left & _ndim & _size
-					& _id &  archive::wrap(_dim,TENSOR_MAXDIM);
-              	make_slices();
+					& _id &  archive::wrap(_dim,TENSOR_MAXDIM) & s0 & s1;
+//              	make_slices();
                 MADNESS_ASSERT(has_structure());
         }
 
