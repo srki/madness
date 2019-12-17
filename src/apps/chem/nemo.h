@@ -92,15 +92,16 @@ public:
 	NemoBase(World& w) : world(w) {}
 
 	std::shared_ptr<NuclearCorrelationFactor> get_ncf_ptr() const {
-		return nuclear_correlation;
+		return ncf;
 	}
 
 	/// normalize the nemos
 	template<typename T, std::size_t NDIM>
-	void normalize(std::vector<Function<T,NDIM> >& nemo) const {
+	void normalize(std::vector<Function<T,NDIM> >& nemo,
+			const Function<double,NDIM> metric=Function<double,NDIM>()) const {
 
 		// compute the norm of the reconstructed orbitals, includes the factor
-		std::vector<Function<T,NDIM> > mos = R*nemo;
+		std::vector<Function<T,NDIM> > mos = (metric.is_initialized()) ? metric*nemo : nemo;
 		std::vector<double> norms = norm2s(world, mos);
 
 		// scale the nemos, excludes the nuclear correlation factor
@@ -111,7 +112,7 @@ public:
 	}
 
 	template<typename T>
-    Tensor<T> Q2(const Tensor<T>& s) const {
+    static Tensor<T> Q2(const Tensor<T>& s) {
 		Tensor<T> Q = -0.5*s;
         for (int i=0; i<s.dim(0); ++i) Q(i,i) += 1.5;
         return Q;
@@ -119,11 +120,15 @@ public:
 
 	/// orthonormalize the vectors
 	template<typename T, std::size_t NDIM>
-	void orthonormalize(std::vector<Function<T,NDIM> >& nemo, double trantol=FunctionDefaults<NDIM>::get_thresh()*0.01) const {
-	    normalize(nemo);
+	void orthonormalize(std::vector<Function<T,NDIM> >& nemo,
+			const Function<double,NDIM> metric=Function<double,NDIM>(),
+			const double trantol=FunctionDefaults<NDIM>::get_thresh()*0.01) const {
+
+		if (nemo.size()==0) return;
+	    normalize(nemo,metric);
 	    double maxq;
 	    do {
-	    	std::vector<Function<T,NDIM> > Rnemo=R*nemo;
+			std::vector<Function<T,NDIM> > Rnemo = (metric.is_initialized()) ? metric*nemo : nemo;
 	        Tensor<T> Q = Q2(matrix_inner(world, Rnemo, Rnemo));
 	        maxq=0.0;
 	        for (int i=0; i<Q.dim(0); ++i)
@@ -134,7 +139,12 @@ public:
 	        nemo = transform(world, nemo, Q, trantol, true);
 	        truncate(world, nemo);
 	    } while (maxq>0.01);
-	    normalize(nemo);
+	    normalize(nemo,metric);
+	}
+
+	template<typename T, std::size_t NDIM>
+	real_function_3d compute_density(const std::vector<Function<T,NDIM> > nemo) const {
+		return sum(world,abssq(world,nemo)).truncate();
 	}
 
 	void construct_nuclear_correlation_factor(const Molecule& molecule,
@@ -142,22 +152,27 @@ public:
 			const std::pair<std::string,double> ncf_parameter) {
 
 	    // construct the nuclear correlation factor:
-	    if (not nuclear_correlation) {
-	    	nuclear_correlation=create_nuclear_correlation_factor(world, molecule, pm, ncf_parameter);
+	    if (not ncf) {
+	    	ncf=create_nuclear_correlation_factor(world, molecule, pm, ncf_parameter);
 	    }
 
 	    // re-project the ncf
-	    nuclear_correlation->initialize(FunctionDefaults<3>::get_thresh());
-	    R = nuclear_correlation->function();
+	    ncf->initialize(FunctionDefaults<3>::get_thresh());
+	    R = ncf->function();
 	    R.set_thresh(FunctionDefaults<3>::get_thresh());
-	    R_square = nuclear_correlation->square();
+	    R_square = ncf->square();
 	    R_square.set_thresh(FunctionDefaults<3>::get_thresh());
 	}
+
+
+	/// compute the nuclear gradients
+	Tensor<double> compute_gradient(const real_function_3d& rhonemo,
+			const Molecule& molecule) const;
 
 	World& world;
 
 	/// the nuclear correlation factor
-	std::shared_ptr<NuclearCorrelationFactor> nuclear_correlation;
+	std::shared_ptr<NuclearCorrelationFactor> ncf;
 
 	/// the nuclear correlation factor
 	real_function_3d R;
@@ -372,7 +387,7 @@ public:
         f=0.5*(f+freproj);
     }
 
-private:
+protected:
 
 	std::shared_ptr<SCF> calc;
 
@@ -395,6 +410,7 @@ private:
 	    ttt=wall_time()-ttt; sss=cpu_time()-sss;
 	    if (world.rank()==0) printf("timer: %20.20s %8.2fs %8.2fs\n", msg, sss, ttt);
 	}
+
 public:
 	struct timer {
         World& world;
@@ -435,12 +451,13 @@ private:
 	/// sum of square of coords at last solved geometry
 	mutable double coords_sum;
 
+protected:
 	/// a poisson solver
 	std::shared_ptr<real_convolution_3d> poisson;
 
-//	/// asymptotic correction for DFT
-//	AC<3> ac;
-//
+	/// asymptotic correction for DFT
+	AC<3> ac;
+
 //    /// apply the AC scheme of Tozer/Handy with the multipole approximation
 //    Function<double,3> apply_ac(const Function<double,3>& vxc)const{
 //    	return ac.apply(vxc);
@@ -456,9 +473,10 @@ private:
 //    	return ac.apply_potential(vxc,vhartree);
 //    }
 
+private:
 	/// polarizable continuum model
 	PCM pcm;
-	AC<3> ac;
+//	AC<3> ac;
 
 	/// adapt the thresholds consistently to a common value
     void set_protocol(const double thresh) {
@@ -552,7 +570,7 @@ private:
 
 	/// localize the nemo orbitals
     vecfuncT localize(const vecfuncT& nemo, const double dconv, const bool randomize) const;
-
+protected:
 	/// return the threshold for vanishing elements in orbital rotations
     double trantol() const {
         return calc->vtol / std::min(30.0, double(get_calc()->amo.size()));
@@ -613,7 +631,7 @@ void Nemo::save_function(const std::vector<Function<T,NDIM> >& f, const std::str
     for (const Function<T,NDIM>& ff:f)  ar & ff;
 }
 
-/// save a function
+/// load a function
 template<typename T, size_t NDIM>
 void Nemo::load_function(std::vector<Function<T,NDIM> >& f, const std::string name) const {
     if (world.rank()==0) print("loading vector of functions",name);

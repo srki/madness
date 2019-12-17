@@ -282,8 +282,6 @@ namespace madness {
 			return (size()!=0);
 		}
 
-	protected:
-
 		/// does this have any data?
 		bool has_no_data() const {return !has_data();}
 
@@ -711,9 +709,18 @@ protected:
 			return n;
 		}
 
+
+		template<typename Q>
+	    typename std::enable_if<(TensorTypeData<T>::iscomplex or TensorTypeData<Q>::iscomplex), TENSOR_RESULT_TYPE(T,Q)>::type
+		friend  trace(const SRConf<T>& rhs, const SRConf<Q>& lhs) {
+			MADNESS_EXCEPTION("no complex trace in srconf.h",1);
+			return T(0.0);
+		}
+
 		/// calculate the Frobenius inner product (tested)
 		template<typename Q>
-		friend TENSOR_RESULT_TYPE(T,Q) trace(const SRConf<T>& rhs, const SRConf<Q>& lhs) {
+	    typename std::enable_if<!(TensorTypeData<T>::iscomplex or TensorTypeData<Q>::iscomplex) , TENSOR_RESULT_TYPE(T,Q)>::type
+		friend  trace(const SRConf<T>& rhs, const SRConf<Q>& lhs) {
 
 			// fast return if either rank is 0
 			if ((lhs.has_no_data()) or (rhs.has_no_data())) return 0.0;

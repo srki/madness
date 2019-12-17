@@ -124,8 +124,15 @@ MP2::MP2(World& world, const std::string& input) : world(world),
 		// for each geometric structure
 		corrfac = CorrelationFactor(world, 1.0, dcut, calc->molecule);
 		SVDTensor<double>::set_reduction_algorithm(param.get<std::string>("reduction_alg"));
+
 	}
 
+
+	// print some output for the user
+	if (world.rank() == 0) {
+		hf->get_calc().param.print("reference");
+		param.print("mp2","mp2_end");
+	}
 //
 //	// print some output for the user
 //	if (world.rank() == 0) {
@@ -166,7 +173,7 @@ double MP2::value(const Tensor<double>& x) {
 		return correlation_energy;
 
 	// nuclear correlation factor depends on the coordinates
-	nuclear_corrfac = hf->nemo_calc.nuclear_correlation;
+	nuclear_corrfac = hf->nemo_calc.ncf;
 
 	// make sure HF used the same geometry as we do
 	coords_sum = xsq;
@@ -688,7 +695,7 @@ real_function_6d MP2::make_Uphi0(ElectronPair& pair) const {
 			op_mod.modified() = true;
 
 			const real_function_3d u1_nuc =
-					hf->nemo_calc.nuclear_correlation->U1(axis);
+					hf->nemo_calc.ncf->U1(axis);
 			const real_function_3d u1_nuc_nemo_i = u1_nuc * hf->nemo(i);
 			const real_function_3d u1_nuc_nemo_j = u1_nuc * hf->nemo(j);
 			const real_function_6d u1_el = corrfac.U1(axis);
@@ -868,11 +875,14 @@ void MP2::guess_mp1_3(ElectronPair& pair) const {
 		save_function(Uphi0, "Uphi0");
 	}
 
-	if (param.read_KffKphi0()) {
-		load_function(KffKphi0,"KffKphi0");
-	} else {
-		KffKphi0 = make_KffKphi0(pair);
-		save_function(KffKphi0, "KffKphi0");
+	if (not param.do_oep()) {
+	
+		if (param.read_KffKphi0()) {
+			load_function(KffKphi0,"KffKphi0");
+		} else {
+			KffKphi0 = make_KffKphi0(pair);
+			save_function(KffKphi0, "KffKphi0");
+		}
 	}
 
 	// these are the terms that come from the single projectors: (O1 + O2) (U+[K,f])|phi^0>
@@ -1410,7 +1420,7 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 	START_TIMER(world);
 	// the purely local part: Coulomb and U2
 	real_function_3d v_local = hf->get_coulomb_potential()
-								+ hf->nemo_calc.nuclear_correlation->U2();
+								+ hf->nemo_calc.ncf->U2();
 
 	// screen the construction of Vphi: do only what is needed to
 	// get an accurate result of the BSH operator
@@ -1433,7 +1443,7 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 	std::vector<real_function_3d> U1_6d;
 	for (int axis = 0; axis < 6; ++axis) {
 		// note integer arithmetic
-		U1_6d.push_back(copy(hf->nemo_calc.nuclear_correlation->U1(axis % 3)));
+		U1_6d.push_back(copy(hf->nemo_calc.ncf->U1(axis % 3)));
 	}
 
 	double tight_thresh = std::min(FunctionDefaults<6>::get_thresh(), 1.e-4);
@@ -1469,7 +1479,7 @@ real_function_6d MP2::multiply_with_0th_order_Hamiltonian(
 
 	// and the exchange
 	START_TIMER(world);
-	vphi = (vphi - K(f, i == j)).truncate().reduce_rank();
+	if (not param.do_oep()) vphi = (vphi - K(f, i == j)).truncate().reduce_rank();
 	vphi.print_size("(U_nuc + J - K) |ket>:  made V tree");
 	END_TIMER(world, "apply K |ket>");
 

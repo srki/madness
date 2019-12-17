@@ -735,7 +735,7 @@ int testGenTensor_reduce(const long& k, const long& dim, const double& eps, cons
 	double norm=0.0;
 	int nerror=0;
 
-	std::vector<std::string> reduction={"divide_conquer","full","RMD"};
+	std::vector<std::string> reduction={"divide_conquer","full","rmd"};
 
 	for (auto alg : reduction) {
 		SVDTensor<double>::set_reduction_algorithm(alg);

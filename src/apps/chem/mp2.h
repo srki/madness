@@ -165,7 +165,7 @@ namespace madness {
 
             // compute the full, reconstructed orbitals from nemo
             orbitals_=mul(world,nemo_calc.R,nemo_calc.get_calc()->amo);
-            real_function_3d R2=nemo_calc.nuclear_correlation->square();
+            real_function_3d R2=nemo_calc.ncf->square();
             R2orbitals_=mul(world,R2,nemo_calc.get_calc()->amo);
 
             return calc->current_energy;
@@ -359,6 +359,7 @@ namespace madness {
     	/// POD for MP2 keywords
     	struct Parameters : public QCCalculationParametersBase {
 
+
         	/// ctor reading out the input file
         	Parameters(World& world) {
 
@@ -371,6 +372,7 @@ namespace madness {
         		initialize<int>("maxsub",2);
         		initialize<bool>("restart",false);
         		initialize<int>("maxiter",5);
+        		initialize<bool>("do_oep",false,"if OEP reference skip exchange commutator");
         		initialize<double>("rank_ratio",0.05,"rank ratio");
         		initialize<std::string>("reduction_alg","divide_conquer","red alg",{"divide_conquer","full","RMD"});
         		initialize<std::vector<std::string> >("read_functions",{""},"read functions instead of calculate them");
@@ -404,6 +406,7 @@ namespace madness {
         	int restart() const {return this->get<bool>("restart");}	/// convenience function
         	int maxiter() const {return this->get<int>("maxiter");}	/// convenience function
         	int maxsub() const {return this->get<int>("maxsub");}	/// convenience function
+        	bool do_oep() const {return this->get<bool>("do_oep");}	/// convenience function
         	double rank_ratio() const {return get<double>("rank_ratio");}
 
         	bool read_Uphi0() const {
@@ -703,7 +706,7 @@ namespace madness {
         real_function_6d get_residue(const real_function_6d& f,
 		const int i, const int j){
         	hf->value();		// make sure the reference is converged
-        	nuclear_corrfac = hf->nemo_calc.nuclear_correlation;
+        	nuclear_corrfac = hf->nemo_calc.ncf;
         	// set all orbitals spaces
         	// When a nuclear correlation factor is used the residual equations
         	// are similarity transformed. Therefore the orbitals in the
