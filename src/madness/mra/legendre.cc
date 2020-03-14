@@ -164,6 +164,22 @@ namespace madness {
         data_is_read = true;
     }
 
+
+    /// Pre-load and cache the quadrature points and weights without a world
+    void load_quadrature(const char* dir) {
+        if (data_is_read) return;
+
+        char buf[32768];
+        buf[0] = 0;
+        strcat(buf,dir);
+        strcat(buf,"/");
+        strcat(buf,filename);
+        filename = strdup(buf);
+        if (!read_data()) throw "load_quadrature: failed reading quadrature coefficients";
+
+        data_is_read = true;
+    }
+
     /// Compute the Gauss-Legendre quadrature points and weights
 
     /// Return in x and w, which should be arrays of n elements, the
