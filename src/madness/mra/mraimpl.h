@@ -3312,6 +3312,15 @@ namespace madness {
 
     template <std::size_t NDIM>
     void FunctionDefaults<NDIM>::set_defaults(World& world) {
+        set_defaults();
+
+        //pmap = std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >(new WorldDCDefaultPmap< Key<NDIM> >(world));
+        pmap = std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >(new madness::LevelPmap< Key<NDIM> >(world));
+        //pmap = std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >(new SimplePmap< Key<NDIM> >(world));
+    }
+
+    template <std::size_t NDIM>
+    void FunctionDefaults<NDIM>::set_defaults() {
         k = 6;
         thresh = 1e-4;
         initial_level = 2;
@@ -3329,11 +3338,8 @@ namespace madness {
         cell = Tensor<double>(NDIM,2);
         cell(_,1) = 1.0;
         recompute_cell_info();
-
-        //pmap = std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >(new WorldDCDefaultPmap< Key<NDIM> >(world));
-        pmap = std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >(new madness::LevelPmap< Key<NDIM> >(world));
-        //pmap = std::shared_ptr< WorldDCPmapInterface< Key<NDIM> > >(new SimplePmap< Key<NDIM> >(world));
     }
+
     template <std::size_t NDIM>
     void FunctionDefaults<NDIM>::print(){
     		std::cout << "Function Defaults:" << std::endl;
