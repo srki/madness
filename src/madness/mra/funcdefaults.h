@@ -211,6 +211,10 @@ namespace madness {
       /// Used to set defaults to k=7, thresh=1-5, for a unit cube [0,1].
         static void set_defaults(World& world);
 
+        /// Set defaults without using a world
+        static void set_defaults();
+
+
         static void print();
 
         /// Returns the default wavelet order

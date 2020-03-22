@@ -349,6 +349,34 @@ namespace madness {
         }
     }
 
+
+    /// Load and cache twoscale & autorrelation coefficients without a world
+    void load_coeffs(const char* dir) {
+        if (!loaded) {
+            int ktop = kmax_autoc;   // Plausible maximum value
+            char buf[32768];
+            buf[0] = 0;
+            strcat(buf, dir);
+            strcat(buf, "/");
+            strcat(buf, twoscale_filename);
+            twoscale_filename = strdup(buf);
+
+            buf[0] = 0;
+            strcat(buf, dir);
+            strcat(buf, "/");
+            strcat(buf, autocorr_filename);
+            autocorr_filename = strdup(buf);
+
+            if (!read_twoscale(kmax))
+                throw "load_coeffs: failed reading twoscale coeffs";
+
+            if (!read_data(ktop))
+                throw "load_coeffs: failed reading coeffs";
+
+            loaded = true;
+        }
+    }
+
 }
 
 
