@@ -57,6 +57,9 @@ namespace madness {
     template<std::size_t NDIM>
     class KeyChildIterator;
 
+    template<std::size_t NDIM>
+    class KeyDescendantIterator;
+
     /// Key is the index for a node of the 2^NDIM-tree
 
     /// See KeyChildIterator for facile generation of children,
@@ -64,7 +67,8 @@ namespace madness {
     /// to child keys.
     template<std::size_t NDIM>
     class Key {
-        friend class KeyChildIterator<NDIM> ;
+        friend class KeyChildIterator<NDIM>;
+        friend class KeyDescendantIterator<NDIM>;
     private:
         Level n;
         Vector<Translation, NDIM> l;
@@ -76,13 +80,13 @@ namespace madness {
         Key() {}
 
         /// Constructor with given n, l
-        Key(Level n, const Vector<Translation, NDIM>& l) : n(n), l(l) 
-	{
+        Key(Level n, const Vector<Translation, NDIM>& l) : n(n), l(l)
+        {
             rehash();
         }
 
         /// Constructor with given n and l=0
-        Key(int n) : n(n), l(0) 
+        Key(int n) : n(n), l(0)
         {
             rehash();
         }
@@ -113,10 +117,10 @@ namespace madness {
         /// Equality test
         bool  operator==(const Key& other) const {
             if (hashval != other.hashval) return false;
-	    if (n != other.n) return false;
-	    for (unsigned int i=0; i<NDIM; i++)
-	      if (l[i] != other.l[i]) return false;
-	    return true; // everything is equal
+            if (n != other.n) return false;
+            for (unsigned int i=0; i<NDIM; i++)
+                if (l[i] != other.l[i]) return false;
+            return true; // everything is equal
         }
 
         bool operator!=(const Key& other) const {
@@ -125,18 +129,18 @@ namespace madness {
 
         /// Comparison operator less than to enable storage in STL map
         bool operator<(const Key& other) const {
-	    if (hashval < other.hashval) return true;
-	    if (hashval > other.hashval) return false;
+            if (hashval < other.hashval) return true;
+            if (hashval > other.hashval) return false;
 
-	    if (n < other.n) return true;
-	    if (n > other.n) return false;
-	    
-	    for (unsigned int i=0; i<NDIM; i++) {
-	      if (l[i] < other.l[i]) return true;
-	      if (l[i] > other.l[i]) return false;
-	    }
+            if (n < other.n) return true;
+            if (n > other.n) return false;
 
-	    return false; // everything is equal
+            for (unsigned int i=0; i<NDIM; i++) {
+                if (l[i] < other.l[i]) return true;
+                if (l[i] > other.l[i]) return false;
+            }
+
+            return false; // everything is equal
         }
 
         inline hashT
@@ -215,15 +219,15 @@ namespace madness {
         /// Assumes key and this are at the same level
         bool
         is_neighbor_of(const Key& key, const std::vector<bool>& bperiodic) const {
-          Translation dist = 0;
-          Translation TWON1 = (Translation(1)<<n) - 1;
-        	for (std::size_t i=0; i<NDIM; ++i)
-        	{
-        	  Translation ll = std::abs(l[i] - key.l[i]);
-        	  if (bperiodic[i] && ll==TWON1) ll=1;
-        	  dist = std::max(dist, ll);
-        	}
-        	return (dist <= 1);
+            Translation dist = 0;
+            Translation TWON1 = (Translation(1)<<n) - 1;
+            for (std::size_t i=0; i<NDIM; ++i)
+            {
+                Translation ll = std::abs(l[i] - key.l[i]);
+                if (bperiodic[i] && ll==TWON1) ll=1;
+                dist = std::max(dist, ll);
+            }
+            return (dist <= 1);
         }
 
         /// given a displacement, generate a neighbor key; ignore boundary conditions and disp's level
@@ -238,25 +242,25 @@ namespace madness {
 
         /// check if this MultiIndex contains point x, disregarding these two dimensions
         bool thisKeyContains(const Vector<double,NDIM>& x, const unsigned int& dim0,
-        		const unsigned int& dim1) const {
+                             const unsigned int& dim1) const {
 
-        	// it's sufficient if one single dimension is out
-        	bool contains=true;
-        	const double twotoN = std::pow(2.0,double(n));
-        	MADNESS_ASSERT(dim0<NDIM and dim1<NDIM);
+            // it's sufficient if one single dimension is out
+            bool contains=true;
+            const double twotoN = std::pow(2.0,double(n));
+            MADNESS_ASSERT(dim0<NDIM and dim1<NDIM);
 
-        	for (unsigned int i=0; i<NDIM; i++ ) {
+            for (unsigned int i=0; i<NDIM; i++ ) {
 
-        		// check bounds
-        		MADNESS_ASSERT((x[i]>=0.0) and (x[i]<=1.0));
+                // check bounds
+                MADNESS_ASSERT((x[i]>=0.0) and (x[i]<=1.0));
 
-        		// leave these two dimensions out
-        		if ((i==dim0) or (i==dim1)) continue;
+                // leave these two dimensions out
+                if ((i==dim0) or (i==dim1)) continue;
 
-        		const int ll=int (x[i]*twotoN);
-        		if (not (l[i]==ll)) contains=false;
-        	}
-        	return contains;
+                const int ll=int (x[i]*twotoN);
+                if (not (l[i]==ll)) contains=false;
+            }
+            return contains;
         }
 
         /// break key into two low-dimensional keys
@@ -293,11 +297,11 @@ namespace madness {
         /// @param[in]	other 	a key
         /// @return		if other is farther out
         bool is_farther_out_than(const Key<NDIM>& other) const {
-        	for (size_t i=0; i<NDIM; ++i) {
-        		if ((other.translation()[i]>0) and (other.translation()[i]>l[i])) return false;
-        		if ((other.translation()[i]<0) and (other.translation()[i]<l[i])) return false;
-        	}
-        	return true;
+            for (size_t i=0; i<NDIM; ++i) {
+                if ((other.translation()[i]>0) and (other.translation()[i]>l[i])) return false;
+                if ((other.translation()[i]<0) and (other.translation()[i]<l[i])) return false;
+            }
+            return true;
         }
 
 
@@ -307,8 +311,8 @@ namespace madness {
             //hashval = sdbm(sizeof(n)+sizeof(l), (unsigned char*)(&n));
             // default hash is still best
 
-	  hashval = hash_value(l);
-	  hash_combine(hashval, n);
+            hashval = hash_value(l);
+            hash_combine(hashval, n);
         }
     };
 
@@ -396,12 +400,78 @@ namespace madness {
         }
     };
 
+    /// Iterates in lexical order thru all descendants at level key.level + levelDiff of a key
+
+    /// Example usage:
+    /// \code
+    ///    for (KeyDescendantIterator<NDIM> it(key, 1); it; ++it) print(it.key());
+    /// \endcode
+    template<std::size_t NDIM>
+    class KeyDescendantIterator {
+        Key<NDIM> parent;
+        Key<NDIM> child;
+        Vector<madness::Translation, NDIM> p;
+        Level levelDiff;
+        madness::Translation maxTranslation;
+        bool finished;
+
+    public:
+        KeyDescendantIterator() :
+                p(0), levelDiff(0), finished(true) {
+        }
+
+        KeyDescendantIterator(const madness::Key<NDIM> &parent, madness::Level levelDiff) :
+                parent(parent), child(parent.n + levelDiff, parent.l * (1u << static_cast<size_t>(levelDiff))), p(0),
+                levelDiff(levelDiff), maxTranslation((1u << static_cast<size_t>(levelDiff)) - 1),
+                finished(false) {
+        }
+
+        /// Pre-increment of an iterator (i.e., ++it)
+        KeyDescendantIterator &operator++() {
+            if (finished) { return *this; }
+
+            std::size_t i;
+            for (i = 0; i < NDIM; ++i) {
+                if (p[i] < maxTranslation) {
+                    ++(p[i]);
+                    ++(child.l[i]);
+                    for (std::size_t j = 0; j < i; ++j) {
+                        p[j] -= maxTranslation;
+                        child.l[j] -= maxTranslation;
+                    }
+                    break;
+                }
+            }
+
+            finished = (i == NDIM);
+            child.rehash();
+
+            return *this;
+        }
+
+        /// True if iterator is not at end
+        operator bool() const {
+            return !finished;
+        }
+
+        template<typename Archive>
+        inline void
+        serialize(Archive& ar) {
+            ar & archive::wrap((unsigned char*) this, sizeof(*this));
+        }
+
+        /// Returns the key of the child
+        inline const madness::Key<NDIM> &key() const {
+            return child;
+        }
+    };
+
     /// Applies op(key) to each child key of parent
     template<std::size_t NDIM, typename opT>
     inline void
     foreach_child(const Key<NDIM>& parent, opT& op) {
         for (KeyChildIterator<NDIM>
-                it(parent); it; ++it)
+                     it(parent); it; ++it)
             op(it.key());
     }
 
@@ -409,9 +479,9 @@ namespace madness {
     template<std::size_t NDIM, typename objT>
     inline void
     foreach_child(const Key<NDIM>& parent, objT* obj, void
-                  (objT::*memfun)(const Key<NDIM>&)) {
+    (objT::*memfun)(const Key<NDIM>&)) {
         for (KeyChildIterator<NDIM>
-                it(parent); it; ++it)
+                     it(parent); it; ++it)
             (obj ->* memfun)(it.key());
     }
 
