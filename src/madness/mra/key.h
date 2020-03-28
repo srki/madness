@@ -60,6 +60,9 @@ namespace madness {
     template<std::size_t NDIM>
     class KeyDescendantIterator;
 
+    template<std::size_t NDIM>
+    class KeyDescendantZOrderIterator;
+
     /// Key is the index for a node of the 2^NDIM-tree
 
     /// See KeyChildIterator for facile generation of children,
@@ -69,6 +72,7 @@ namespace madness {
     class Key {
         friend class KeyChildIterator<NDIM>;
         friend class KeyDescendantIterator<NDIM>;
+        friend class KeyDescendantZOrderIterator<NDIM>;
     private:
         Level n;
         Vector<Translation, NDIM> l;
@@ -465,6 +469,75 @@ namespace madness {
             return child;
         }
     };
+
+    /// Iterates in Z-order thru all descendants at level key.level + levelDiff of a key
+
+    /// Example usage:
+    /// \code
+    ///    for (KeyDescendantIterator<NDIM> it(key, 1); it; ++it) print(it.key());
+    /// \endcode
+    template<std::size_t NDIM>
+    class KeyDescendantZOrderIterator {
+        Key<NDIM> parent;
+        Key<NDIM> child;
+        Vector<madness::Translation, NDIM> p;
+        Level levelDiff;
+        madness::Translation maxTranslation;
+        size_t remainingIter;
+
+    public:
+        KeyDescendantZOrderIterator() :
+                p(0), levelDiff(0), remainingIter(0) {
+        }
+
+        KeyDescendantZOrderIterator(const madness::Key<NDIM> &parent, madness::Level levelDiff) :
+                parent(parent), child(parent.n + levelDiff, parent.l * (1u << static_cast<size_t>(levelDiff))), p(0),
+                levelDiff(levelDiff), maxTranslation((1u << static_cast<size_t>(levelDiff)) - 1),
+                remainingIter(1u << (static_cast<size_t>(levelDiff) * NDIM)) {
+        }
+
+        /// Pre-increment of an iterator (i.e., ++it)
+        KeyDescendantZOrderIterator &operator++() {
+            if (remainingIter == 0) { return *this; }
+
+            remainingIter--;
+
+            size_t carry = 0x1;
+            do {
+                for (size_t i = 0; i < NDIM; i++) {
+                    /* cary, x = x & cary, x ^ carry */
+                    size_t tmpCarry = carry;
+                    carry = p[i] & carry;
+                    p[i] ^= tmpCarry;
+                    child.l[i] ^= tmpCarry;
+                }
+
+                carry <<= 1u;
+            } while (carry != 0);
+
+
+            child.rehash();
+
+            return *this;
+        }
+
+        /// True if iterator is not at end
+        operator bool() const {
+            return remainingIter > 0;
+        }
+
+        template<typename Archive>
+        inline void
+        serialize(Archive& ar) {
+            ar & archive::wrap((unsigned char*) this, sizeof(*this));
+        }
+
+        /// Returns the key of the child
+        inline const madness::Key<NDIM> &key() const {
+            return child;
+        }
+    };
+
 
     /// Applies op(key) to each child key of parent
     template<std::size_t NDIM, typename opT>
