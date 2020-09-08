@@ -701,6 +701,16 @@ void SCF::analyze_vectors(World& world, const vecfuncT & mo, const tensorT& occ,
 			printf("total number of coefficients = %.8e\n\n", double(ncoeff));
 		}
 	}
+	
+	for (long i = 0; i < nmo; i++) {
+            std::ofstream f;
+            char fname[256];
+            sprintf(fname, "tree.%4.4ld", i);
+            if (world.rank() == 0) f.open(fname);
+            mo[i].print_tree(f);
+            f.close();
+        }
+
 }
 
 distmatT SCF::localize_boys(World & world, const vecfuncT & mo,
