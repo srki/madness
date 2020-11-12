@@ -824,6 +824,22 @@ namespace madness {
             os << "}" << std::endl;
         }
 
+
+        void load_tree_random_coeff(std::string file_name, size_t seed = 0) {
+            auto is = std::ifstream{file_name};
+            if (!is.good()) {
+                std::cerr << "File: " << file_name << " does not exists." << std::endl;
+                exit(1);
+            }
+
+            load_tree_random_coeff(is, seed);
+        }
+
+        void load_tree_random_coeff(std::istream &is, size_t seed = 0) {
+            if (impl) impl->load_tree_random_coeff(is, seed);
+        }
+
+
         /// Print a summary of the load balancing info
 
         /// This is serial and VERY expensive

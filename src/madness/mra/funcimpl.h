@@ -48,6 +48,7 @@
 #include <madness/mra/key.h>
 #include <madness/mra/funcdefaults.h>
 #include <madness/mra/function_factory.h>
+#include <random>
 
 #include "leafop.h"
 
@@ -1234,6 +1235,59 @@ namespace madness {
 
         /// Functor for the do_print_tree method (using GraphViz)
         void do_print_tree_graphviz(const keyT& key, std::ostream& os, Level maxlevel) const;
+
+        void load_tree_random_coeff(std::istream &is, size_t seed) {
+            std::string line;
+            while (std::getline(is, line)) {
+                std::istringstream ss(line);
+
+                std::string keyStr;
+                std::string hasCoeffStr;
+                ss >> keyStr >> hasCoeffStr;
+                bool hasCoeff = hasCoeffStr == "(has_coeff=1,";
+
+                /* Read key */
+                ss.str(keyStr);
+
+                ss.ignore(); // (
+                Level level;
+                ss >> level;
+                ss.ignore(); // ,
+
+                Vector<madness::Translation, NDIM> translation;
+                for (size_t i = 0; i < NDIM; i++) {
+                    ss.ignore(); // [ ,
+                    madness::Translation t;
+                    ss >> t;
+                    translation[i] = t;
+                }
+
+                auto key = Key<NDIM>{level, translation};
+
+                if (!hasCoeff) {
+                    auto tensor = madness::Tensor<T>{cdata.vk, false};
+
+                    /* Calculate seed */
+                    seed = (seed << 6u) ^ key.level();
+                    for (size_t i = 0; i < NDIM; i++) {
+                        seed = (seed << 6u) ^ key.translation()[i];
+                    }
+
+                    std::mt19937 gen(seed);
+                    std::uniform_real_distribution<> dis(-1.0, 1.0);
+
+                    assert(tensor.iscontiguous());
+                    auto ptr = tensor.ptr();
+                    for (ssize_t i = 0; i < tensor.size(); i++) {
+                        *ptr++ = dis(gen);
+                    }
+
+                    coeffs.replace(key, FunctionNode<T, NDIM>{tensor, false});
+                } else {
+                    coeffs.replace(key, FunctionNode<T, NDIM>{coeffT{}, true});
+                }
+            }
+        }
 
         /// convert a number [0,limit] to a hue color code [blue,red],
         /// or, if log is set, a number [1.e-10,limit]
