@@ -17,3 +17,11 @@ foreach(example ${EXAMPLE_SOURCES})
   add_mad_executable(${example} ${example}.cc "MADchem;MADgit")
   add_dependencies(numerical-examples-madness ${example})
 endforeach()
+
+set(EXAMPLE_KEMC_SOURCES kemc diff)
+
+# Create executables for example kemc applications
+foreach(example ${EXAMPLE_KEMC_SOURCES})
+  add_mad_executable(${example} kemc/${example}.cc "MADchem;MADgit")
+  add_dependencies(numerical-examples-madness ${example})
+endforeach()
