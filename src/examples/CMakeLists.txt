@@ -18,7 +18,7 @@ foreach(example ${EXAMPLE_SOURCES})
   add_dependencies(numerical-examples-madness ${example})
 endforeach()
 
-set(EXAMPLE_KEMC_SOURCES kemc diff)
+set(EXAMPLE_KEMC_SOURCES kemc kemc_vec diff)
 
 # Create executables for example kemc applications
 foreach(example ${EXAMPLE_KEMC_SOURCES})
